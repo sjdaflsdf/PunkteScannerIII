@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
                 new double[]{5.0, 0}
         );
 
+        // Note aus Prozentsatz ermitteln
         public double gradeFromPercent(double percent) {
             double clamped = Math.max(0, Math.min(100, percent));
             for (double[] entry : DEFAULT_GRADE_SCALE) {
@@ -30,20 +31,21 @@ import org.springframework.stereotype.Service;
             }
             return 5.0;
         }
-
+        // Prozentsatz berechnen
         public double calculatePercent(double earnedPoints, double maxPoints) {
             if (maxPoints <= 0) {
                 throw new IllegalArgumentException(
                         "maxPoints muss größer als 0 sein");
             }
             return (earnedPoints / maxPoints) * 100;
-        }
-
+            }
+        // Note berechnen
         public double calculateGrade(double earnedPoints, double maxPoints) {
             double percent = calculatePercent(earnedPoints, maxPoints);
             return gradeFromPercent(percent);
         }
 
+        // Bestanden prüfen - bestehenAb kommt aus Pruefung
         public boolean isPassed(double grade) {
             return grade <= 4.0;
         }
