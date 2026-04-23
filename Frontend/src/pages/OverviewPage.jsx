@@ -2,6 +2,7 @@ import StatCard from "../components/StatCard";
 import NotenverteilungChart from "../components/NotenverteilungChart";
 import NotenschluesselEditor from "../components/NotenschluesselEditor";
 import ErgebnisseTabelle from "../components/ErgebnisseTabelle";
+import { useBreakpoint } from "../hooks/useBreakpoint";
 
 const PRUEFUNGEN = [
   {
@@ -38,15 +39,17 @@ function getStatusBadge(status) {
   return { label: "Entwurf", bg: "#f5f5f5", color: "#757575" };
 }
 
-function PruefungItem({ pruefung }) {
+function PruefungItem({ pruefung, isMobile }) {
   const badge = getStatusBadge(pruefung.status);
   return (
     <div style={{
       display: "flex",
+      flexDirection: isMobile ? "column" : "row",
       justifyContent: "space-between",
-      alignItems: "center",
+      alignItems: isMobile ? "flex-start" : "center",
       padding: "13px 0",
       borderBottom: "1px solid #f2f2f2",
+      gap: isMobile ? "10px" : 0,
     }}>
       <div>
         <p style={{ fontWeight: "500", fontSize: "0.9rem", marginBottom: "3px" }}>{pruefung.name}</p>
@@ -54,7 +57,7 @@ function PruefungItem({ pruefung }) {
           {pruefung.datum} · {pruefung.studierende} Studierende · {pruefung.maxPunkte} Pkt. max
         </p>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0, marginLeft: "16px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
         <span style={{
           backgroundColor: badge.bg,
           color: badge.color,
@@ -83,13 +86,25 @@ function PruefungItem({ pruefung }) {
 }
 
 export default function OverviewPage({ onNeuePruefung }) {
+  const { isMobile, isTablet } = useBreakpoint();
+  const padding = isMobile ? "20px 16px" : "32px 36px";
+
   return (
-    <div style={{ padding: "32px 36px", maxWidth: "1100px" }}>
+    <div style={{ padding, maxWidth: "1100px" }}>
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px" }}>
+      <div style={{
+        display: "flex",
+        flexDirection: isMobile ? "column" : "row",
+        justifyContent: "space-between",
+        alignItems: isMobile ? "flex-start" : "flex-start",
+        gap: isMobile ? "12px" : 0,
+        marginBottom: "28px",
+      }}>
         <div>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: "600", marginBottom: "5px" }}>Willkommen zurück</h1>
+          <h1 style={{ fontSize: isMobile ? "1.2rem" : "1.4rem", fontWeight: "600", marginBottom: "5px" }}>
+            Willkommen zurück
+          </h1>
           <p style={{ color: "#999", fontSize: "0.85rem" }}>
             Sommersemester 2026 · THWS Würzburg-Schweinfurt
           </p>
@@ -106,6 +121,7 @@ export default function OverviewPage({ onNeuePruefung }) {
             fontSize: "0.875rem",
             fontWeight: "500",
             whiteSpace: "nowrap",
+            alignSelf: isMobile ? "flex-start" : "auto",
           }}
         >
           + Neue Prüfung
@@ -113,10 +129,15 @@ export default function OverviewPage({ onNeuePruefung }) {
       </div>
 
       {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "24px" }}>
-        <StatCard title="Prüfungen gesamt"    value="12"   sub="3 noch offen"            color="#4a6fa5" />
-        <StatCard title="Studierende bewertet" value="187"  sub="von 215 eingetragen"     color="#2d5a4b" />
-        <StatCard title="Ø Bestehensquote"    value="78%"  sub="letzte 30 Tage"          color="#8b6914" />
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, 1fr)" : "repeat(3, 1fr)",
+        gap: "16px",
+        marginBottom: "24px",
+      }}>
+        <StatCard title="Prüfungen gesamt"     value="12"   sub="3 noch offen"           color="#4a6fa5" />
+        <StatCard title="Studierende bewertet" value="187"  sub="von 215 eingetragen"    color="#2d5a4b" />
+        <StatCard title="Ø Bestehensquote"     value="78%"  sub="letzte 30 Tage"         color="#8b6914" />
       </div>
 
       {/* Aktuelle Prüfungen */}
@@ -130,12 +151,17 @@ export default function OverviewPage({ onNeuePruefung }) {
           </button>
         </div>
         {PRUEFUNGEN.map((p) => (
-          <PruefungItem key={p.id} pruefung={p} />
+          <PruefungItem key={p.id} pruefung={p} isMobile={isMobile} />
         ))}
       </div>
 
       {/* Chart + Notenschlüssel */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+        gap: "16px",
+        marginBottom: "16px",
+      }}>
         <div style={card}>
           <NotenverteilungChart />
         </div>

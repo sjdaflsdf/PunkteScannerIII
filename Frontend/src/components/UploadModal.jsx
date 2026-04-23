@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useBreakpoint } from "../hooks/useBreakpoint";
 
 export default function UploadModal({ onClose }) {
   const [dateien, setDateien] = useState([]); // Array von { file, vorschau }
   const [dragOver, setDragOver] = useState(false);
+  const { isMobile } = useBreakpoint();
 
   function dateienHinzufuegen(files) {
     const neu = Array.from(files).map((file) => ({
@@ -36,7 +38,11 @@ export default function UploadModal({ onClose }) {
       alert("Bitte zuerst eine Datei auswählen.");
       return;
     }
+<<<<<<< HEAD
     console.log("Upload:", dateien.map((d) => d.file.name));
+=======
+    console.log("Upload:", datei.name);
+>>>>>>> 2ac4409 (MobileVersion hinzugefügt)
     onClose();
   }
 
@@ -48,21 +54,38 @@ export default function UploadModal({ onClose }) {
         inset: 0,
         backgroundColor: "rgba(0,0,0,0.45)",
         display: "flex",
-        alignItems: "center",
+        alignItems: isMobile ? "flex-end" : "center",
         justifyContent: "center",
         zIndex: 200,
       }}
     >
       <div style={{
         backgroundColor: "white",
+<<<<<<< HEAD
         borderRadius: "16px",
         padding: "32px",
         width: "480px",
         maxWidth: "90vw",
         maxHeight: "90vh",
         overflowY: "auto",
+=======
+        borderRadius: isMobile ? "16px 16px 0 0" : "16px",
+        padding: isMobile ? "24px 20px" : "32px",
+        width: isMobile ? "100%" : "480px",
+        maxWidth: isMobile ? "100%" : "90vw",
+>>>>>>> 2ac4409 (MobileVersion hinzugefügt)
         boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
       }}>
+        {isMobile && (
+          <div style={{
+            width: "40px",
+            height: "4px",
+            backgroundColor: "#d0d0d0",
+            borderRadius: "2px",
+            margin: "0 auto 20px",
+          }} />
+        )}
+
         <h2 style={{ fontSize: "1.2rem", marginBottom: "6px" }}>Neue Prüfung hochladen</h2>
         <p style={{ color: "#888", fontSize: "0.875rem", marginBottom: "24px" }}>
           PDF oder Foto hochladen, um die automatische Auswertung zu starten.
@@ -83,7 +106,11 @@ export default function UploadModal({ onClose }) {
               gap: "8px",
               border: `2px dashed ${dragOver ? "#2d5a4b" : "#d0d0d0"}`,
               borderRadius: "10px",
+<<<<<<< HEAD
               padding: "28px",
+=======
+              padding: isMobile ? "24px 16px" : "32px",
+>>>>>>> 2ac4409 (MobileVersion hinzugefügt)
               cursor: "pointer",
               backgroundColor: dragOver ? "#f0f7f4" : "#fafafa",
               marginBottom: "12px",
@@ -91,8 +118,13 @@ export default function UploadModal({ onClose }) {
             }}
           >
             <span style={{ fontSize: "2rem" }}>📄</span>
+<<<<<<< HEAD
             <span style={{ fontSize: "0.875rem", color: "#555", fontWeight: "500" }}>
               Datei hierher ziehen oder klicken
+=======
+            <span style={{ fontSize: "0.875rem", color: "#555", fontWeight: "500", textAlign: "center" }}>
+              {datei ? datei.name : isMobile ? "Tippen zum Auswählen" : "Datei hierher ziehen oder klicken"}
+>>>>>>> 2ac4409 (MobileVersion hinzugefügt)
             </span>
             <span style={{ fontSize: "0.78rem", color: "#aaa" }}>PDF, JPG, PNG – mehrere möglich</span>
             <input
@@ -104,6 +136,7 @@ export default function UploadModal({ onClose }) {
             />
           </label>
 
+<<<<<<< HEAD
           {/* ── Kamera-Button (Handy) ── */}
           <label style={{
             display: "flex",
@@ -246,16 +279,26 @@ export default function UploadModal({ onClose }) {
 
           {/* ── Buttons ── */}
           <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+=======
+          <div style={{
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            gap: "10px",
+            justifyContent: "flex-end",
+          }}>
+>>>>>>> 2ac4409 (MobileVersion hinzugefügt)
             <button
               type="button"
               onClick={onClose}
               style={{
                 border: "1px solid #d0d0d0",
                 background: "white",
-                padding: "8px 20px",
+                padding: "10px 20px",
                 borderRadius: "8px",
                 cursor: "pointer",
                 color: "#555",
+                fontSize: "0.875rem",
+                order: isMobile ? 2 : 0,
               }}
             >
               Abbrechen
@@ -267,11 +310,16 @@ export default function UploadModal({ onClose }) {
                 backgroundColor: dateien.length ? "#2d5a4b" : "#a0b8b2",
                 color: "white",
                 border: "none",
-                padding: "8px 20px",
+                padding: "10px 20px",
                 borderRadius: "8px",
                 cursor: dateien.length ? "pointer" : "not-allowed",
                 fontWeight: "500",
+<<<<<<< HEAD
                 transition: "background 0.15s",
+=======
+                fontSize: "0.875rem",
+                order: isMobile ? 1 : 0,
+>>>>>>> 2ac4409 (MobileVersion hinzugefügt)
               }}
             >
               {dateien.length > 1

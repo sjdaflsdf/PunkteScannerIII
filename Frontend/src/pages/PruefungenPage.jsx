@@ -1,8 +1,20 @@
+import { useBreakpoint } from "../hooks/useBreakpoint";
+
 export default function PruefungenPage({ onNeuePruefung }) {
+  const { isMobile } = useBreakpoint();
+  const padding = isMobile ? "20px 16px" : "32px 36px";
+
   return (
-    <div style={{ padding: "32px 36px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "1.4rem", fontWeight: "600" }}>Prüfungen</h1>
+    <div style={{ padding }}>
+      <div style={{
+        display: "flex",
+        flexDirection: isMobile ? "column" : "row",
+        justifyContent: "space-between",
+        alignItems: isMobile ? "flex-start" : "center",
+        gap: isMobile ? "12px" : 0,
+        marginBottom: "24px",
+      }}>
+        <h1 style={{ fontSize: isMobile ? "1.2rem" : "1.4rem", fontWeight: "600" }}>Prüfungen</h1>
         <button
           onClick={onNeuePruefung}
           style={{
@@ -14,6 +26,7 @@ export default function PruefungenPage({ onNeuePruefung }) {
             cursor: "pointer",
             fontSize: "0.875rem",
             fontWeight: "500",
+            alignSelf: isMobile ? "flex-start" : "auto",
           }}
         >
           + Neue Prüfung
