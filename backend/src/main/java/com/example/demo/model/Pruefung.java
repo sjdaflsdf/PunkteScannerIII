@@ -16,7 +16,7 @@ public class Pruefung {
     private Professor professor;
     private String name;
     private LocalDate datum;
-    private int max_punkte;
+    private int maxPunkte;
     private String status;
     private double bestehenAb = 50.0; // NEU – Standard 50%
 
@@ -25,11 +25,11 @@ public class Pruefung {
 
     }
 
-    public Pruefung(Professor professor, String name, LocalDate datum, int max_punkte, String status, double bestehenAb){
+    public Pruefung(Professor professor, String name, LocalDate datum, int maxPunkte, String status, double bestehenAb){
         this.professor=professor;
         this.name=name;
         this.datum=datum;
-        this.max_punkte=max_punkte;
+        this.maxPunkte=maxPunkte;
         this.status=status;
         this.bestehenAb=bestehenAb;
 
@@ -38,6 +38,7 @@ public class Pruefung {
     public Long getId() {
         return id;
     }
+    public void setId(Long id) {this.id = id;}
 
     public Professor getProfessor() {return professor;}
 
@@ -51,9 +52,9 @@ public class Pruefung {
 
     public void setDatum(LocalDate datum) {this.datum = datum;}
 
-    public int getMax_punkte() {return max_punkte;}
+    public int getMaxPunkte() {return maxPunkte;}
 
-    public void setMax_punkte(int max_punkte) {this.max_punkte = max_punkte;}
+    public void setMaxPunkte(int max_punkte) {this.maxPunkte = maxPunkte;}
 
     public String getStatus() {return status;}
 
