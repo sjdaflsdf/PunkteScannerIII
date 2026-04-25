@@ -25,42 +25,93 @@ function noteStyle(noteStr) {
 const TH = { padding: "10px 14px", borderBottom: "2px solid #e8e8e8", color: "#666", fontWeight: "600", fontSize: "0.8rem", textAlign: "left", whiteSpace: "nowrap" };
 const TD = { padding: "10px 14px", borderBottom: "1px solid #f2f2f2", fontSize: "0.875rem", color: "#333" };
 
-export default function ErgebnisseTabelle({ pruefungName = "Datenbanken II" }) {
-  return (
-    <div>
-      <h3 style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.06em", color: "#888", marginBottom: "16px" }}>
-        Ergebnisse – {pruefungName}
-      </h3>
+// ── Export Funktionen ──────────────────────────────────
+function exportCSV() {
+  const header = ["Matrikel-Nr.", "Name",
+    ...AUFGABEN_CONFIG.map(a => a.label), "Gesamt", "Note"];
 
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "560px" }}>
-          <thead>
+  const rows = ERGEBNISSE.map(e => {
+    const gesamt = e.aufgaben.reduce((s, p) => s + p, 0);
+    return [e.matrikel, e.name, ...e.aufgaben,
+      `${gesamt}/${MAX_GESAMT}`, e.note];
+  });
+
+  const csv = [header, ...rows]
+      .map(row => row.join(","))
+      .join("\n");
+
+  downloadDatei(csv, "ergebnisse.csv", "text/csv");
+}
+
+function exportJSON() {
+  const data = ERGEBNISSE.map(e => ({
+    matrikel: e.matrikel,
+    name: e.name,
+    aufgaben: e.aufgaben,
+    gesamt: e.aufgaben.reduce((s, p) => s + p, 0),
+    note: e.note
+  }));
+  downloadDatei(
+      JSON.stringify(data, null, 2),
+      "ergebnisse.json",
+      "application/json"
+  );
+}
+
+function downloadDatei(inhalt, dateiname, typ) {
+  const blob = new Blob([inhalt], { type: typ });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = dateiname;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Hauptkomponente ────────────────────────────────────
+export default function ErgebnisseTabelle({
+                                            pruefungName = "Datenbanken II"
+                                          }) {
+  return (
+      <div>
+        <h3 style={{ fontSize: "0.75rem", fontWeight: "700",
+          textTransform: "uppercase", letterSpacing: "0.06em",
+          color: "#888", marginBottom: "16px" }}>
+          Ergebnisse – {pruefungName}
+        </h3>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse",
+            minWidth: "560px" }}>
+            <thead>
             <tr>
               <th style={TH}>Matrikel-Nr.</th>
               <th style={TH}>Name</th>
               {AUFGABEN_CONFIG.map((a) => (
-                <th key={a.label} style={TH}>{a.label} /{a.max}</th>
+                  <th key={a.label} style={TH}>{a.label} /{a.max}</th>
               ))}
               <th style={TH}>Gesamt</th>
               <th style={TH}>Note</th>
             </tr>
-          </thead>
-          <tbody>
+            </thead>
+            <tbody>
             {ERGEBNISSE.map((e) => {
               const gesamt = e.aufgaben.reduce((s, p) => s + p, 0);
               const ns = noteStyle(e.note);
               return (
-                <tr key={e.matrikel} style={{ transition: "background 0.1s" }}
-                  onMouseEnter={(ev) => ev.currentTarget.style.backgroundColor = "#fafafa"}
-                  onMouseLeave={(ev) => ev.currentTarget.style.backgroundColor = ""}
-                >
-                  <td style={{ ...TD, color: "#888" }}>{e.matrikel}</td>
-                  <td style={{ ...TD, fontWeight: "500" }}>{e.name}</td>
-                  {e.aufgaben.map((p, i) => (
-                    <td key={i} style={TD}>{p}</td>
-                  ))}
-                  <td style={TD}>{gesamt} / {MAX_GESAMT}</td>
-                  <td style={TD}>
+                  <tr key={e.matrikel}
+                      onMouseEnter={(ev) =>
+                          ev.currentTarget.style.backgroundColor = "#fafafa"}
+                      onMouseLeave={(ev) =>
+                          ev.currentTarget.style.backgroundColor = ""}
+                  >
+                    <td style={{ ...TD, color: "#888" }}>{e.matrikel}</td>
+                    <td style={{ ...TD, fontWeight: "500" }}>{e.name}</td>
+                    {e.aufgaben.map((p, i) => (
+                        <td key={i} style={TD}>{p}</td>
+                    ))}
+                    <td style={TD}>{gesamt} / {MAX_GESAMT}</td>
+                    <td style={TD}>
                     <span style={{
                       ...ns,
                       padding: "3px 10px",
@@ -70,35 +121,62 @@ export default function ErgebnisseTabelle({ pruefungName = "Datenbanken II" }) {
                     }}>
                       {e.note}
                     </span>
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
               );
             })}
-          </tbody>
-        </table>
-      </div>
+            </tbody>
+          </table>
+        </div>
 
-      <div style={{ marginTop: "16px", display: "flex", gap: "8px" }}>
-        {["↓ PDF", "↓ CSV", "↓ Excel"].map((label) => (
+        {/* ── Export Buttons ── */}
+        <div style={{ marginTop: "16px", display: "flex", gap: "8px" }}>
+
           <button
-            key={label}
-            style={{
-              border: "1px solid #d8d8d8",
-              background: "white",
-              padding: "6px 16px",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "0.82rem",
-              color: "#444",
-              transition: "background 0.15s",
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f5f5f5"}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "white"}
+              onClick={exportCSV}
+              style={btnStyle}
+              onMouseEnter={(e) =>
+                  e.currentTarget.style.backgroundColor = "#f5f5f5"}
+              onMouseLeave={(e) =>
+                  e.currentTarget.style.backgroundColor = "white"}
           >
-            {label}
+            ↓ CSV
           </button>
-        ))}
+
+          <button
+              onClick={exportJSON}
+              style={btnStyle}
+              onMouseEnter={(e) =>
+                  e.currentTarget.style.backgroundColor = "#f5f5f5"}
+              onMouseLeave={(e) =>
+                  e.currentTarget.style.backgroundColor = "white"}
+          >
+            ↓ JSON
+          </button>
+
+          <button
+              onClick={() => window.print()}
+              style={btnStyle}
+              onMouseEnter={(e) =>
+                  e.currentTarget.style.backgroundColor = "#f5f5f5"}
+              onMouseLeave={(e) =>
+                  e.currentTarget.style.backgroundColor = "white"}
+          >
+            ↓ PDF (Drucken)
+          </button>
+
+        </div>
       </div>
-    </div>
   );
 }
+
+const btnStyle = {
+  border: "1px solid #d8d8d8",
+  background: "white",
+  padding: "6px 16px",
+  borderRadius: "6px",
+  cursor: "pointer",
+  fontSize: "0.82rem",
+  color: "#444",
+  transition: "background 0.15s",
+};
