@@ -1,15 +1,10 @@
-FROM maven:3-jdk-8-alpine as builder
-
-WORKDIR /usr/src/app
-
-COPY . /usr/src/app
-RUN mvn package
-
-FROM openjdk:8-jre-alpine
-
-COPY --from=builder /usr/src/app/target/*.jar /app.jar
-
-EXPOSE 8080
-
-ENTRYPOINT ["java"]
-CMD ["-jar", "/app.jar"]
+FROM eclipse-temurin:19-jdk-alpine
+WORKDIR /app
+COPY .mvn/ .mvn
+COPY mvnw pom.xml ./
+RUN chmod +x mvnw
+RUN ./mvnw dependency:go-offline
+COPY src ./src
+RUN ./mvnw clean package -DskipTests
+EXPOSE 8081
+ENTRYPOINT ["java", "-jar", "target/punktescanner-0.0.1-SNAPSHOT.jar"]
