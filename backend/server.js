@@ -6,29 +6,25 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Adresse vom Spring Boot Server (DB)
-const DB_URL = "http://localhost:8081/api";
+//  FIX: richtige Render URL
+const DB_URL = "https://punktescanneriii.onrender.com/api";
 
 // ─── ENDPUNKT 1 ───────────────────────────────────────────
-// Frontend fragt: "Gib mir alle Prüfungen"
-// Du holst sie aus der DB und schickst sie ans Frontend
 app.get("/api/pruefungen", async (req, res) => {
   try {
     const response = await fetch(`${DB_URL}/pruefungen`);
     const data = await response.json();
-    res.json(data); // geht ans Frontend
+    res.json(data);
   } catch (err) {
     res.status(500).json({ fehler: "DB nicht erreichbar." });
   }
 });
 
 // ─── ENDPUNKT 2 ───────────────────────────────────────────
-// Frontend schickt Aufgaben → du rechnest Note aus → schickst
-// Ergebnis ans Frontend UND speicherst es in der DB
 app.post("/api/pruefung/auswerten", async (req, res) => {
   const { aufgaben, notenschluessel, pruefungId, studentId } = req.body;
 
-  // 1. Note berechnen mit deiner Logik
+  // 1. Note berechnen
   const ergebnis = pruefungAuswerten({
     aufgaben,
     notenschluessel: notenschluessel ?? DEFAULT_NOTENSCHLUESSEL
@@ -36,7 +32,7 @@ app.post("/api/pruefung/auswerten", async (req, res) => {
 
   // 2. Ergebnis in DB speichern
   try {
-    await fetch(`${DB_URL}/ergebnisse`, {
+    const response = await fetch(`${DB_URL}/ergebnisse`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -46,16 +42,23 @@ app.post("/api/pruefung/auswerten", async (req, res) => {
         note: ergebnis.note,
       }),
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("DB Fehler:", response.status, errorText);
+    } else {
+      console.log("DB speichern erfolgreich");
+    }
+
   } catch (err) {
     console.error("DB speichern fehlgeschlagen:", err.message);
   }
 
-  // 3. Ergebnis ans Frontend schicken
+  // 3. Antwort ans Frontend
   res.json(ergebnis);
 });
 
 // ─── ENDPUNKT 3 ───────────────────────────────────────────
-// Ergebnisse einer Prüfung aus DB holen und ans Frontend schicken
 app.get("/api/pruefungen/:id/ergebnisse", async (req, res) => {
   try {
     const response = await fetch(`${DB_URL}/ergebnisse/pruefung/${req.params.id}`);
@@ -67,13 +70,11 @@ app.get("/api/pruefungen/:id/ergebnisse", async (req, res) => {
 });
 
 // ─── ENDPUNKT 4 ───────────────────────────────────────────
-// Notenschlüssel abrufen
 app.get("/api/notenschluessel", (req, res) => {
   res.json(DEFAULT_NOTENSCHLUESSEL);
 });
 
 // ─── ENDPUNKT 5 ───────────────────────────────────────────
-// Mehrere Studis auf einmal auswerten (für die Tabelle)
 app.post("/api/pruefungen/batch", async (req, res) => {
   const { pruefungen, notenschluessel } = req.body;
   const ergebnisse = [];
@@ -81,15 +82,13 @@ app.post("/api/pruefungen/batch", async (req, res) => {
 
   for (const studi of pruefungen) {
     try {
-      // 1. Note berechnen
       const ergebnis = pruefungAuswerten({
         aufgaben: studi.aufgaben,
         notenschluessel: notenschluessel ?? DEFAULT_NOTENSCHLUESSEL,
       });
 
-      // 2. In DB speichern
       try {
-        await fetch(`${DB_URL}/ergebnisse`, {
+        const response = await fetch(`${DB_URL}/ergebnisse`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -99,19 +98,30 @@ app.post("/api/pruefungen/batch", async (req, res) => {
             note: ergebnis.note,
           }),
         });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("DB Fehler (Batch):", response.status, errorText);
+        } else {
+          console.log("DB speichern erfolgreich (Batch)");
+        }
+
       } catch (err) {
         console.error("DB speichern fehlgeschlagen:", err.message);
       }
 
-      // 3. Ans Frontend
       ergebnisse.push({
         matrikel: studi.matrikel ?? "unbekannt",
         name: studi.name ?? "unbekannt",
         aufgaben: studi.aufgaben,
         ...ergebnis,
       });
+
     } catch (err) {
-      fehler.push({ matrikel: studi.matrikel ?? "unbekannt", fehler: err.message });
+      fehler.push({
+        matrikel: studi.matrikel ?? "unbekannt",
+        fehler: err.message
+      });
     }
   }
 
