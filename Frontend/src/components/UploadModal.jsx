@@ -1,49 +1,72 @@
 import { useState } from "react";
-import { useBreakpoint } from "../hooks/useBreakpoint";
+import { api } from "../api";
 
-export default function UploadModal({ onClose }) {
-  const [dateien, setDateien] = useState([]); // Array von { file, vorschau }
-  const [dragOver, setDragOver] = useState(false);
-  const { isMobile } = useBreakpoint();
+const LEERE_AUFGABE = { name: "", punkte: "", maxPunkte: "" };
 
-  function dateienHinzufuegen(files) {
-    const neu = Array.from(files).map((file) => ({
-      file,
-      vorschau: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
-    }));
-    setDateien((prev) => [...prev, ...neu]);
+export default function UploadModal({ onClose, onErgebnis }) {
+  const [pruefungName, setPruefungName] = useState("");
+  const [aufgaben, setAufgaben] = useState([{ ...LEERE_AUFGABE }]);
+  const [loading, setLoading] = useState(false);
+  const [fehler, setFehler] = useState(null);
+
+  function aufgabeAendern(index, feld, wert) {
+    setAufgaben((prev) =>
+      prev.map((a, i) => (i === index ? { ...a, [feld]: wert } : a))
+    );
   }
 
-  function handleDateiWahl(e) {
-    if (e.target.files.length) dateienHinzufuegen(e.target.files);
-    e.target.value = "";
+  function aufgabeHinzufuegen() {
+    setAufgaben((prev) => [...prev, { ...LEERE_AUFGABE }]);
   }
 
-  function handleDrop(e) {
+  function aufgabeEntfernen(index) {
+    setAufgaben((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
-    setDragOver(false);
-    if (e.dataTransfer.files.length) dateienHinzufuegen(e.dataTransfer.files);
-  }
+    setFehler(null);
 
-  function dateiEntfernen(index) {
-    setDateien((prev) => {
-      if (prev[index].vorschau) URL.revokeObjectURL(prev[index].vorschau);
-      return prev.filter((_, i) => i !== index);
-    });
-  }
-
-  function handleSubmit(e) {
-    e.preventDefault();
-    if (!dateien.length) {
-      alert("Bitte zuerst eine Datei auswählen.");
+    if (!pruefungName.trim()) {
+      setFehler("Bitte einen Prüfungsnamen eingeben.");
       return;
     }
-<<<<<<< HEAD
-    console.log("Upload:", dateien.map((d) => d.file.name));
-=======
-    console.log("Upload:", datei.name);
->>>>>>> 2ac4409 (MobileVersion hinzugefügt)
-    onClose();
+    if (aufgaben.length === 0) {
+      setFehler("Mindestens eine Aufgabe erforderlich.");
+      return;
+    }
+    for (const [i, a] of aufgaben.entries()) {
+      if (!a.name.trim()) {
+        setFehler(`Aufgabe ${i + 1}: Name fehlt.`);
+        return;
+      }
+      if (a.punkte === "" || a.maxPunkte === "") {
+        setFehler(`Aufgabe ${i + 1}: Punkte fehlen.`);
+        return;
+      }
+      if (Number(a.punkte) > Number(a.maxPunkte)) {
+        setFehler(`Aufgabe ${i + 1}: Erreichte Punkte übersteigen Maximum.`);
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const payload = {
+        pruefungName: pruefungName.trim(),
+        aufgaben: aufgaben.map((a) => ({
+          name: a.name.trim(),
+          punkte: Number(a.punkte),
+          maxPunkte: Number(a.maxPunkte),
+        })),
+      };
+      const result = await api.auswerten(payload);
+      onErgebnis(result);
+    } catch (err) {
+      setFehler(err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -54,277 +77,169 @@ export default function UploadModal({ onClose }) {
         inset: 0,
         backgroundColor: "rgba(0,0,0,0.45)",
         display: "flex",
-        alignItems: isMobile ? "flex-end" : "center",
+        alignItems: "center",
         justifyContent: "center",
         zIndex: 200,
       }}
     >
       <div style={{
         backgroundColor: "white",
-<<<<<<< HEAD
         borderRadius: "16px",
         padding: "32px",
-        width: "480px",
-        maxWidth: "90vw",
+        width: "520px",
+        maxWidth: "95vw",
         maxHeight: "90vh",
         overflowY: "auto",
-=======
-        borderRadius: isMobile ? "16px 16px 0 0" : "16px",
-        padding: isMobile ? "24px 20px" : "32px",
-        width: isMobile ? "100%" : "480px",
-        maxWidth: isMobile ? "100%" : "90vw",
->>>>>>> 2ac4409 (MobileVersion hinzugefügt)
         boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
       }}>
-        {isMobile && (
-          <div style={{
-            width: "40px",
-            height: "4px",
-            backgroundColor: "#d0d0d0",
-            borderRadius: "2px",
-            margin: "0 auto 20px",
-          }} />
-        )}
-
-        <h2 style={{ fontSize: "1.2rem", marginBottom: "6px" }}>Neue Prüfung hochladen</h2>
+        <h2 style={{ fontSize: "1.2rem", marginBottom: "6px" }}>Prüfung auswerten</h2>
         <p style={{ color: "#888", fontSize: "0.875rem", marginBottom: "24px" }}>
-          PDF oder Foto hochladen, um die automatische Auswertung zu starten.
+          Prüfungsname und Aufgabenpunkte eingeben.
         </p>
 
         <form onSubmit={handleSubmit}>
 
-          {/* ── Drag & Drop Bereich ── */}
-          <label
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              border: `2px dashed ${dragOver ? "#2d5a4b" : "#d0d0d0"}`,
-              borderRadius: "10px",
-<<<<<<< HEAD
-              padding: "28px",
-=======
-              padding: isMobile ? "24px 16px" : "32px",
->>>>>>> 2ac4409 (MobileVersion hinzugefügt)
-              cursor: "pointer",
-              backgroundColor: dragOver ? "#f0f7f4" : "#fafafa",
-              marginBottom: "12px",
-              transition: "all 0.15s",
-            }}
-          >
-            <span style={{ fontSize: "2rem" }}>📄</span>
-<<<<<<< HEAD
-            <span style={{ fontSize: "0.875rem", color: "#555", fontWeight: "500" }}>
-              Datei hierher ziehen oder klicken
-=======
-            <span style={{ fontSize: "0.875rem", color: "#555", fontWeight: "500", textAlign: "center" }}>
-              {datei ? datei.name : isMobile ? "Tippen zum Auswählen" : "Datei hierher ziehen oder klicken"}
->>>>>>> 2ac4409 (MobileVersion hinzugefügt)
-            </span>
-            <span style={{ fontSize: "0.78rem", color: "#aaa" }}>PDF, JPG, PNG – mehrere möglich</span>
+          {/* Prüfungsname */}
+          <div style={{ marginBottom: "20px" }}>
+            <label style={labelStyle}>Prüfungsname</label>
             <input
-              type="file"
-              accept=".pdf,image/*"
-              multiple
-              onChange={handleDateiWahl}
-              style={{ display: "none" }}
+              type="text"
+              value={pruefungName}
+              onChange={(e) => setPruefungName(e.target.value)}
+              placeholder="z. B. Datenbanken II"
+              disabled={loading}
+              style={inputStyle}
             />
-          </label>
+          </div>
 
-<<<<<<< HEAD
-          {/* ── Kamera-Button (Handy) ── */}
-          <label style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "8px",
-            width: "100%",
-            padding: "10px",
-            marginBottom: "20px",
-            border: "1px solid #d0d0d0",
-            borderRadius: "8px",
-            cursor: "pointer",
-            backgroundColor: "#fafafa",
-            fontSize: "0.875rem",
-            color: "#555",
-            fontWeight: "500",
-            boxSizing: "border-box",
-          }}>
-            📷 Foto mit Kamera aufnehmen
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleDateiWahl}
-              style={{ display: "none" }}
-            />
-          </label>
+          {/* Aufgaben */}
+          <div style={{ marginBottom: "8px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+              <label style={labelStyle}>Aufgaben</label>
+              <span style={{ fontSize: "0.75rem", color: "#999" }}>
+                Erreicht / Maximum
+              </span>
+            </div>
 
-          {/* ── Miniaturansicht ── */}
-          {dateien.length > 0 && (
-            <div style={{ marginBottom: "20px" }}>
-              <div style={{
-                fontSize: "0.78rem",
-                color: "#888",
-                marginBottom: "8px",
-                fontWeight: "500",
-              }}>
-                {dateien.length} Datei{dateien.length > 1 ? "en" : ""} ausgewählt
-              </div>
-              <div style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
-                gap: "8px",
-              }}>
-                {dateien.map((d, i) => (
-                  <div key={i} style={{ position: "relative" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {aufgaben.map((aufgabe, i) => (
+                <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input
+                    type="text"
+                    value={aufgabe.name}
+                    onChange={(e) => aufgabeAendern(i, "name", e.target.value)}
+                    placeholder={`Aufgabe ${i + 1}`}
+                    disabled={loading}
+                    style={{ ...inputStyle, flex: 2 }}
+                  />
+                  <input
+                    type="number"
+                    value={aufgabe.punkte}
+                    onChange={(e) => aufgabeAendern(i, "punkte", e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    disabled={loading}
+                    style={{ ...inputStyle, flex: 1, textAlign: "center" }}
+                  />
+                  <span style={{ color: "#ccc", flexShrink: 0 }}>/</span>
+                  <input
+                    type="number"
+                    value={aufgabe.maxPunkte}
+                    onChange={(e) => aufgabeAendern(i, "maxPunkte", e.target.value)}
+                    placeholder="10"
+                    min="1"
+                    disabled={loading}
+                    style={{ ...inputStyle, flex: 1, textAlign: "center" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => aufgabeEntfernen(i)}
+                    disabled={aufgaben.length === 1 || loading}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: aufgaben.length === 1 ? "#ccc" : "#e57373",
+                      cursor: aufgaben.length === 1 ? "default" : "pointer",
+                      fontSize: "1.1rem",
+                      padding: "0 4px",
+                      flexShrink: 0,
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
 
-                    {/* Bild-Vorschau */}
-                    {d.vorschau ? (
-                      <img
-                        src={d.vorschau}
-                        alt={d.file.name}
-                        style={{
-                          width: "100%",
-                          aspectRatio: "1",
-                          objectFit: "cover",
-                          borderRadius: "8px",
-                          border: "0.5px solid #E0DED8",
-                          display: "block",
-                        }}
-                      />
-                    ) : (
-                      /* PDF-Kachel */
-                      <div style={{
-                        width: "100%",
-                        aspectRatio: "1",
-                        borderRadius: "8px",
-                        border: "0.5px solid #E0DED8",
-                        background: "#F8F7F5",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "4px",
-                        padding: "6px",
-                        boxSizing: "border-box",
-                      }}>
-                        <span style={{ fontSize: "22px" }}>📄</span>
-                        <span style={{
-                          fontSize: "9px",
-                          color: "#888",
-                          textAlign: "center",
-                          wordBreak: "break-all",
-                          lineHeight: "1.3",
-                          overflow: "hidden",
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                        }}>
-                          {d.file.name}
-                        </span>
-                      </div>
-                    )}
+            <button
+              type="button"
+              onClick={aufgabeHinzufuegen}
+              disabled={loading}
+              style={{
+                marginTop: "10px",
+                background: "none",
+                border: "1px dashed #c0c0c0",
+                borderRadius: "6px",
+                padding: "7px 14px",
+                cursor: "pointer",
+                color: "#2d5a4b",
+                fontSize: "0.82rem",
+                width: "100%",
+              }}
+            >
+              + Aufgabe hinzufügen
+            </button>
+          </div>
 
-                    {/* Entfernen-Button */}
-                    <button
-                      type="button"
-                      onClick={() => dateiEntfernen(i)}
-                      style={{
-                        position: "absolute",
-                        top: "3px",
-                        right: "3px",
-                        width: "18px",
-                        height: "18px",
-                        borderRadius: "50%",
-                        background: "rgba(0,0,0,0.55)",
-                        color: "#fff",
-                        border: "none",
-                        cursor: "pointer",
-                        fontSize: "9px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        padding: 0,
-                        lineHeight: 1,
-                      }}
-                    >
-                      ✕
-                    </button>
-
-                    {/* Dateiname unter Bild */}
-                    {d.vorschau && (
-                      <div style={{
-                        fontSize: "9px",
-                        color: "#888",
-                        textAlign: "center",
-                        marginTop: "3px",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}>
-                        {d.file.name}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+          {/* Fehlerbox */}
+          {fehler && (
+            <div style={{
+              marginTop: "16px",
+              backgroundColor: "#fff3f3",
+              border: "1px solid #fcc",
+              borderRadius: "8px",
+              padding: "10px 14px",
+              color: "#c00",
+              fontSize: "0.82rem",
+            }}>
+              {fehler}
             </div>
           )}
 
-          {/* ── Buttons ── */}
-          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-=======
-          <div style={{
-            display: "flex",
-            flexDirection: isMobile ? "column" : "row",
-            gap: "10px",
-            justifyContent: "flex-end",
-          }}>
->>>>>>> 2ac4409 (MobileVersion hinzugefügt)
+          {/* Buttons */}
+          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "24px" }}>
             <button
               type="button"
               onClick={onClose}
+              disabled={loading}
               style={{
                 border: "1px solid #d0d0d0",
                 background: "white",
-                padding: "10px 20px",
+                padding: "8px 20px",
                 borderRadius: "8px",
                 cursor: "pointer",
                 color: "#555",
                 fontSize: "0.875rem",
-                order: isMobile ? 2 : 0,
               }}
             >
               Abbrechen
             </button>
             <button
               type="submit"
-              disabled={dateien.length === 0}
+              disabled={loading}
               style={{
                 backgroundColor: dateien.length ? "#2d5a4b" : "#a0b8b2",
                 color: "white",
                 border: "none",
-                padding: "10px 20px",
+                padding: "8px 20px",
                 borderRadius: "8px",
-                cursor: dateien.length ? "pointer" : "not-allowed",
+                cursor: loading ? "not-allowed" : "pointer",
                 fontWeight: "500",
-<<<<<<< HEAD
-                transition: "background 0.15s",
-=======
                 fontSize: "0.875rem",
-                order: isMobile ? 1 : 0,
->>>>>>> 2ac4409 (MobileVersion hinzugefügt)
+                opacity: loading ? 0.7 : 1,
               }}
             >
-              {dateien.length > 1
-                ? `${dateien.length} Dateien auswerten`
-                : "Hochladen & Auswerten"}
+              {loading ? "Wird ausgewertet…" : "Auswerten"}
             </button>
           </div>
 
@@ -333,3 +248,25 @@ export default function UploadModal({ onClose }) {
     </div>
   );
 }
+
+const labelStyle = {
+  display: "block",
+  fontSize: "0.8rem",
+  fontWeight: "600",
+  color: "#555",
+  marginBottom: "6px",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+};
+
+const inputStyle = {
+  width: "100%",
+  border: "1px solid #e0e0e0",
+  borderRadius: "6px",
+  padding: "8px 12px",
+  fontSize: "0.875rem",
+  color: "#333",
+  outline: "none",
+  boxSizing: "border-box",
+  backgroundColor: "white",
+};

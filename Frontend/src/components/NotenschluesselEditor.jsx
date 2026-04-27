@@ -1,28 +1,44 @@
-import { useState } from "react";
-
-const INITIAL_SCHLUESSEL = [
-  { note: "1,0", schwelle: "90", color: "#4CAF50" },
-  { note: "2,0", schwelle: "75", color: "#8BC34A" },
-  { note: "3,0", schwelle: "60", color: "#FF9800" },
-  { note: "4,0", schwelle: "50", color: "#F44336" },
-  { note: "5,0", schwelle: null,  color: "#B71C1C" },
-];
+import { useState, useEffect } from "react";
+import { api } from "../api";
 
 export default function NotenschluesselEditor({ pruefungName = "Datenbanken II" }) {
-  const [schluessel, setSchluessel] = useState(INITIAL_SCHLUESSEL);
+  const [schluessel, setSchluessel] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [fehler, setFehler] = useState(null);
   const [gespeichert, setGespeichert] = useState(false);
 
-  function handleChange(index, value) {
+  useEffect(() => {
+    api.getNotenschluessel()
+      .then((data) => setSchluessel(data))
+      .catch((e) => setFehler(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function handleChange(index, wert) {
     setSchluessel((prev) =>
-      prev.map((n, i) => (i === index ? { ...n, schwelle: value } : n))
+      prev.map((n, i) =>
+        i === index ? { ...n, schwelle: wert === "" ? null : Number(wert) } : n
+      )
     );
     setGespeichert(false);
   }
 
   function handleSpeichern() {
-    // Hier später: ans Backend senden
+    // Speichern-Endpunkt noch nicht vorhanden – nur lokal
     setGespeichert(true);
     setTimeout(() => setGespeichert(false), 2000);
+  }
+
+  if (loading) {
+    return <p style={{ color: "#999", fontSize: "0.875rem" }}>Lade Notenschlüssel…</p>;
+  }
+
+  if (fehler) {
+    return (
+      <div style={fehlerBoxStyle}>
+        <strong>Fehler:</strong> {fehler}
+      </div>
+    );
   }
 
   return (
@@ -83,7 +99,9 @@ export default function NotenschluesselEditor({ pruefungName = "Datenbanken II" 
                   %
                 </span>
               ) : (
-                <span style={{ color: "#888" }}>unter 50 %</span>
+                <span style={{ color: "#888" }}>
+                  unter {schluessel[i - 1]?.schwelle ?? 50} %
+                </span>
               )}
             </div>
           </div>
@@ -111,3 +129,12 @@ export default function NotenschluesselEditor({ pruefungName = "Datenbanken II" 
     </div>
   );
 }
+
+const fehlerBoxStyle = {
+  backgroundColor: "#fff3f3",
+  border: "1px solid #fcc",
+  borderRadius: "8px",
+  padding: "12px 16px",
+  color: "#c00",
+  fontSize: "0.82rem",
+};
