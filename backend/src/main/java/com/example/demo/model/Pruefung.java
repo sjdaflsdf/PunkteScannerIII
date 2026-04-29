@@ -54,7 +54,7 @@ public class Pruefung {
 
     public int getMaxPunkte() {return maxPunkte;}
 
-    public void setMaxPunkte(int max_punkte) {this.maxPunkte = maxPunkte;}
+    public void setMaxPunkte(int max_Punkte) {this.maxPunkte = max_Punkte;}
 
     public String getStatus() {return status;}
 
