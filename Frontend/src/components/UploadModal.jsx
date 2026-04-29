@@ -1,28 +1,42 @@
 import { useState } from "react";
 
 export default function UploadModal({ onClose }) {
-  const [datei, setDatei] = useState(null);
+  const [dateien, setDateien] = useState([]); // Array von { file, vorschau }
   const [dragOver, setDragOver] = useState(false);
 
+  function dateienHinzufuegen(files) {
+    const neu = Array.from(files).map((file) => ({
+      file,
+      vorschau: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+    }));
+    setDateien((prev) => [...prev, ...neu]);
+  }
+
   function handleDateiWahl(e) {
-    setDatei(e.target.files[0]);
+    if (e.target.files.length) dateienHinzufuegen(e.target.files);
+    e.target.value = "";
   }
 
   function handleDrop(e) {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) setDatei(file);
+    if (e.dataTransfer.files.length) dateienHinzufuegen(e.dataTransfer.files);
+  }
+
+  function dateiEntfernen(index) {
+    setDateien((prev) => {
+      if (prev[index].vorschau) URL.revokeObjectURL(prev[index].vorschau);
+      return prev.filter((_, i) => i !== index);
+    });
   }
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (!datei) {
+    if (!dateien.length) {
       alert("Bitte zuerst eine Datei auswählen.");
       return;
     }
-    // Hier später: Datei ans Backend senden
-    console.log("Upload:", datei.name);
+    console.log("Upload:", dateien.map((d) => d.file.name));
     onClose();
   }
 
@@ -45,6 +59,8 @@ export default function UploadModal({ onClose }) {
         padding: "32px",
         width: "480px",
         maxWidth: "90vw",
+        maxHeight: "90vh",
+        overflowY: "auto",
         boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
       }}>
         <h2 style={{ fontSize: "1.2rem", marginBottom: "6px" }}>Neue Prüfung hochladen</h2>
@@ -53,6 +69,8 @@ export default function UploadModal({ onClose }) {
         </p>
 
         <form onSubmit={handleSubmit}>
+
+          {/* ── Drag & Drop Bereich ── */}
           <label
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -65,26 +83,168 @@ export default function UploadModal({ onClose }) {
               gap: "8px",
               border: `2px dashed ${dragOver ? "#2d5a4b" : "#d0d0d0"}`,
               borderRadius: "10px",
-              padding: "32px",
+              padding: "28px",
               cursor: "pointer",
               backgroundColor: dragOver ? "#f0f7f4" : "#fafafa",
-              marginBottom: "16px",
+              marginBottom: "12px",
               transition: "all 0.15s",
             }}
           >
             <span style={{ fontSize: "2rem" }}>📄</span>
             <span style={{ fontSize: "0.875rem", color: "#555", fontWeight: "500" }}>
-              {datei ? datei.name : "Datei hierher ziehen oder klicken"}
+              Datei hierher ziehen oder klicken
             </span>
-            <span style={{ fontSize: "0.78rem", color: "#aaa" }}>PDF, JPG, PNG</span>
+            <span style={{ fontSize: "0.78rem", color: "#aaa" }}>PDF, JPG, PNG – mehrere möglich</span>
             <input
               type="file"
               accept=".pdf,image/*"
+              multiple
               onChange={handleDateiWahl}
               style={{ display: "none" }}
             />
           </label>
 
+          {/* ── Kamera-Button (Handy) ── */}
+          <label style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "8px",
+            width: "100%",
+            padding: "10px",
+            marginBottom: "20px",
+            border: "1px solid #d0d0d0",
+            borderRadius: "8px",
+            cursor: "pointer",
+            backgroundColor: "#fafafa",
+            fontSize: "0.875rem",
+            color: "#555",
+            fontWeight: "500",
+            boxSizing: "border-box",
+          }}>
+            📷 Foto mit Kamera aufnehmen
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleDateiWahl}
+              style={{ display: "none" }}
+            />
+          </label>
+
+          {/* ── Miniaturansicht ── */}
+          {dateien.length > 0 && (
+            <div style={{ marginBottom: "20px" }}>
+              <div style={{
+                fontSize: "0.78rem",
+                color: "#888",
+                marginBottom: "8px",
+                fontWeight: "500",
+              }}>
+                {dateien.length} Datei{dateien.length > 1 ? "en" : ""} ausgewählt
+              </div>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
+                gap: "8px",
+              }}>
+                {dateien.map((d, i) => (
+                  <div key={i} style={{ position: "relative" }}>
+
+                    {/* Bild-Vorschau */}
+                    {d.vorschau ? (
+                      <img
+                        src={d.vorschau}
+                        alt={d.file.name}
+                        style={{
+                          width: "100%",
+                          aspectRatio: "1",
+                          objectFit: "cover",
+                          borderRadius: "8px",
+                          border: "0.5px solid #E0DED8",
+                          display: "block",
+                        }}
+                      />
+                    ) : (
+                      /* PDF-Kachel */
+                      <div style={{
+                        width: "100%",
+                        aspectRatio: "1",
+                        borderRadius: "8px",
+                        border: "0.5px solid #E0DED8",
+                        background: "#F8F7F5",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "4px",
+                        padding: "6px",
+                        boxSizing: "border-box",
+                      }}>
+                        <span style={{ fontSize: "22px" }}>📄</span>
+                        <span style={{
+                          fontSize: "9px",
+                          color: "#888",
+                          textAlign: "center",
+                          wordBreak: "break-all",
+                          lineHeight: "1.3",
+                          overflow: "hidden",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                        }}>
+                          {d.file.name}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Entfernen-Button */}
+                    <button
+                      type="button"
+                      onClick={() => dateiEntfernen(i)}
+                      style={{
+                        position: "absolute",
+                        top: "3px",
+                        right: "3px",
+                        width: "18px",
+                        height: "18px",
+                        borderRadius: "50%",
+                        background: "rgba(0,0,0,0.55)",
+                        color: "#fff",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "9px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                        lineHeight: 1,
+                      }}
+                    >
+                      ✕
+                    </button>
+
+                    {/* Dateiname unter Bild */}
+                    {d.vorschau && (
+                      <div style={{
+                        fontSize: "9px",
+                        color: "#888",
+                        textAlign: "center",
+                        marginTop: "3px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}>
+                        {d.file.name}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Buttons ── */}
           <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
             <button
               type="button"
@@ -102,19 +262,24 @@ export default function UploadModal({ onClose }) {
             </button>
             <button
               type="submit"
+              disabled={dateien.length === 0}
               style={{
-                backgroundColor: "#2d5a4b",
+                backgroundColor: dateien.length ? "#2d5a4b" : "#a0b8b2",
                 color: "white",
                 border: "none",
                 padding: "8px 20px",
                 borderRadius: "8px",
-                cursor: "pointer",
+                cursor: dateien.length ? "pointer" : "not-allowed",
                 fontWeight: "500",
+                transition: "background 0.15s",
               }}
             >
-              Hochladen & Auswerten
+              {dateien.length > 1
+                ? `${dateien.length} Dateien auswerten`
+                : "Hochladen & Auswerten"}
             </button>
           </div>
+
         </form>
       </div>
     </div>
