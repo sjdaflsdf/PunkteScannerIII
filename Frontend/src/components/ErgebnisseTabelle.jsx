@@ -11,6 +11,31 @@ function noteStyle(noteStr) {
   return { backgroundColor: "#ffebee", color: "#b71c1c" };
 }
 
+function exportCSV(pruefungName, ergebnisse, aufgabenCols) {
+  const kopfFelder = ["Matrikel-Nr.", "Name", ...aufgabenCols.map((a) => a.label), "Gesamt", "Note"];
+  const zeilen = ergebnisse.map((e) => {
+    const punkte = e.aufgaben ?? [];
+    const gesamt = typeof e.gesamt === "number"
+      ? e.gesamt
+      : punkte.reduce((s, p) => s + (p ?? 0), 0);
+    return [
+      e.matrikelNr ?? e.matrikel ?? "",
+      e.name ?? "",
+      ...punkte.map(String),
+      gesamt,
+      e.note ?? "",
+    ].join(";");
+  });
+  const csv = [kopfFelder.join(";"), ...zeilen].join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `ergebnisse_${pruefungName ?? "export"}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 const TH = {
   padding: "10px 14px",
   borderBottom: "2px solid #e8e8e8",
@@ -27,23 +52,11 @@ const TD = {
   color: "#333",
 };
 
-function exportCSV(ergebnisse) {
-  const kopf = ["Matrikel-Nr.", "Name", "Gesamt", "Note"].join(";");
-  const zeilen = ergebnisse.map((e) =>
-    [e.matrikelNr ?? e.matrikel ?? "", e.name ?? "", e.gesamt ?? "", e.note ?? ""].join(";")
-  );
-  const csv = [kopf, ...zeilen].join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "ergebnisse.csv";
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 export default function ErgebnisseTabelle({ pruefungId }) {
-  const [daten, setDaten] = useState(null);
+  const [ergebnisse, setErgebnisse] = useState([]);
+  const [pruefungName, setPruefungName] = useState("");
+  const [aufgabenCols, setAufgabenCols] = useState([]);
+  const [maxGesamt, setMaxGesamt] = useState(null);
   const [loading, setLoading] = useState(false);
   const [fehler, setFehler] = useState(null);
 
@@ -51,36 +64,61 @@ export default function ErgebnisseTabelle({ pruefungId }) {
     if (!pruefungId) return;
     setLoading(true);
     setFehler(null);
-    setDaten(null);
+    setErgebnisse([]);
 
     api.getPruefungErgebnisse(pruefungId)
-      .then(setDaten)
+      .then((daten) => {
+        // Unterstützt flat-Array- und Objekt-Antwort
+        const arr = Array.isArray(daten) ? daten : (daten?.ergebnisse ?? []);
+        const name = daten?.pruefungName ?? arr[0]?.pruefung?.name ?? "";
+        const configAusApi = daten?.aufgabenConfig ?? null;
+
+        setErgebnisse(arr);
+        setPruefungName(name);
+
+        if (configAusApi) {
+          setAufgabenCols(configAusApi);
+          setMaxGesamt(daten?.maxGesamt ?? configAusApi.reduce((s, a) => s + (a.max ?? 0), 0));
+        } else if (arr.length > 0 && Array.isArray(arr[0]?.aufgaben)) {
+          // Spalten aus erstem Datensatz ableiten
+          const cols = arr[0].aufgaben.map((_, i) => ({ label: `Aufgabe ${i + 1}`, max: null }));
+          setAufgabenCols(cols);
+          setMaxGesamt(daten?.maxGesamt ?? null);
+        } else {
+          setAufgabenCols([]);
+          setMaxGesamt(null);
+        }
+      })
       .catch((e) => setFehler(e.message))
       .finally(() => setLoading(false));
   }, [pruefungId]);
 
-  const pruefungName  = daten?.pruefungName ?? "";
-  const aufgabenConfig = daten?.aufgabenConfig ?? [];
-  const ergebnisse    = daten?.ergebnisse ?? [];
-  const maxGesamt     = daten?.maxGesamt ?? aufgabenConfig.reduce((s, a) => s + (a.max ?? 0), 0);
+  const ueberschrift = pruefungName ? `Ergebnisse – ${pruefungName}` : "Ergebnisse";
 
   return (
     <div>
-      <h3 style={{ fontSize: "0.75rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.06em", color: "#888", marginBottom: "16px" }}>
-        Ergebnisse{pruefungName ? ` – ${pruefungName}` : ""}
+      <h3 style={{
+        fontSize: "0.75rem",
+        fontWeight: "700",
+        textTransform: "uppercase",
+        letterSpacing: "0.06em",
+        color: "#888",
+        marginBottom: "16px",
+      }}>
+        {ueberschrift}
       </h3>
 
       {!pruefungId && (
-        <p style={{ color: "#999", fontSize: "0.875rem" }}>Wähle eine Prüfung aus der Liste oben.</p>
+        <p style={hinweisStyle}>Wähle eine Prüfung aus der Liste oben.</p>
       )}
       {loading && (
-        <p style={{ color: "#999", fontSize: "0.875rem" }}>Lade Ergebnisse…</p>
+        <p style={hinweisStyle}>Lade Ergebnisse…</p>
       )}
       {fehler && (
         <div style={fehlerBoxStyle}><strong>Fehler:</strong> {fehler}</div>
       )}
       {!loading && !fehler && pruefungId && ergebnisse.length === 0 && (
-        <p style={{ color: "#999", fontSize: "0.875rem" }}>Keine Ergebnisse vorhanden.</p>
+        <p style={hinweisStyle}>Keine Ergebnisse vorhanden.</p>
       )}
 
       {!loading && !fehler && ergebnisse.length > 0 && (
@@ -91,10 +129,12 @@ export default function ErgebnisseTabelle({ pruefungId }) {
                 <tr>
                   <th style={TH}>Matrikel-Nr.</th>
                   <th style={TH}>Name</th>
-                  {aufgabenConfig.map((a) => (
-                    <th key={a.label} style={TH}>{a.label} /{a.max}</th>
+                  {aufgabenCols.map((a) => (
+                    <th key={a.label} style={TH}>
+                      {a.label}{a.max != null ? ` /${a.max}` : ""}
+                    </th>
                   ))}
-                  <th style={TH}>Gesamt</th>
+                  <th style={TH}>Gesamt{maxGesamt != null ? ` /${maxGesamt}` : ""}</th>
                   <th style={TH}>Note</th>
                 </tr>
               </thead>
@@ -107,18 +147,26 @@ export default function ErgebnisseTabelle({ pruefungId }) {
                   const ns = noteStyle(e.note);
                   return (
                     <tr
-                      key={e.matrikelNr ?? e.matrikel ?? e.id}
+                      key={e.id ?? e.matrikelNr ?? e.matrikel}
                       onMouseEnter={(ev) => (ev.currentTarget.style.backgroundColor = "#fafafa")}
                       onMouseLeave={(ev) => (ev.currentTarget.style.backgroundColor = "")}
                     >
                       <td style={{ ...TD, color: "#888" }}>{e.matrikelNr ?? e.matrikel ?? "–"}</td>
-                      <td style={{ ...TD, fontWeight: "500" }}>{e.name}</td>
+                      <td style={{ ...TD, fontWeight: "500" }}>{e.name ?? "–"}</td>
                       {punkte.map((p, i) => (
                         <td key={i} style={TD}>{p}</td>
                       ))}
-                      <td style={TD}>{gesamt} / {maxGesamt}</td>
                       <td style={TD}>
-                        <span style={{ ...ns, padding: "3px 10px", borderRadius: "5px", fontWeight: "600", fontSize: "0.82rem" }}>
+                        {gesamt}{maxGesamt != null ? ` / ${maxGesamt}` : ""}
+                      </td>
+                      <td style={TD}>
+                        <span style={{
+                          ...ns,
+                          padding: "3px 10px",
+                          borderRadius: "5px",
+                          fontWeight: "600",
+                          fontSize: "0.82rem",
+                        }}>
                           {e.note ?? "–"}
                         </span>
                       </td>
@@ -131,7 +179,7 @@ export default function ErgebnisseTabelle({ pruefungId }) {
 
           <div style={{ marginTop: "16px", display: "flex", gap: "8px" }}>
             <button
-              onClick={() => exportCSV(ergebnisse)}
+              onClick={() => exportCSV(pruefungName, ergebnisse, aufgabenCols)}
               style={exportBtnStyle}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f5f5f5")}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "white")}
@@ -139,12 +187,7 @@ export default function ErgebnisseTabelle({ pruefungId }) {
               ↓ CSV
             </button>
             {["↓ PDF", "↓ Excel"].map((label) => (
-              <button
-                key={label}
-                style={{ ...exportBtnStyle, color: "#aaa", cursor: "not-allowed" }}
-                title="Noch nicht verfügbar"
-                disabled
-              >
+              <button key={label} style={{ ...exportBtnStyle, color: "#bbb", cursor: "not-allowed" }} disabled title="Noch nicht verfügbar">
                 {label}
               </button>
             ))}
@@ -155,6 +198,16 @@ export default function ErgebnisseTabelle({ pruefungId }) {
   );
 }
 
+const hinweisStyle = { color: "#999", fontSize: "0.875rem" };
+const fehlerBoxStyle = {
+  backgroundColor: "#fff3f3",
+  border: "1px solid #fcc",
+  borderRadius: "8px",
+  padding: "12px 16px",
+  color: "#c00",
+  fontSize: "0.82rem",
+  marginBottom: "8px",
+};
 const exportBtnStyle = {
   border: "1px solid #d8d8d8",
   background: "white",
@@ -164,14 +217,4 @@ const exportBtnStyle = {
   fontSize: "0.82rem",
   color: "#444",
   transition: "background 0.15s",
-};
-
-const fehlerBoxStyle = {
-  backgroundColor: "#fff3f3",
-  border: "1px solid #fcc",
-  borderRadius: "8px",
-  padding: "12px 16px",
-  color: "#c00",
-  fontSize: "0.82rem",
-  marginBottom: "8px",
 };

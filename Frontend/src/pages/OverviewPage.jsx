@@ -26,7 +26,9 @@ function PruefungItem({ pruefung, isSelected, onSelect }) {
       <div>
         <p style={{ fontWeight: "500", fontSize: "0.9rem", marginBottom: "3px" }}>{pruefung.name}</p>
         <p style={{ color: "#999", fontSize: "0.78rem" }}>
-          {pruefung.datum} · {pruefung.studierende} Studierende · {pruefung.maxPunkte} Pkt. max
+          {pruefung.datum}
+          {pruefung.studierende != null ? ` · ${pruefung.studierende} Studierende` : ""}
+          {pruefung.maxPunkte   != null ? ` · ${pruefung.maxPunkte} Pkt. max` : ""}
         </p>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0, marginLeft: "16px" }}>
@@ -69,18 +71,21 @@ export default function OverviewPage({ onNeuePruefung }) {
 
   useEffect(() => {
     api.getPruefungen()
-      .then((data) => {
-        setPruefungen(data);
-        if (data.length > 0) setSelectedId(data[0].id);
+      .then((daten) => {
+        setPruefungen(daten);
+        if (daten.length > 0) setSelectedId(daten[0].id);
       })
       .catch((e) => setFehler(e.message))
       .finally(() => setLoading(false));
   }, []);
 
-  const gesamt      = pruefungen.length;
-  const bewertet    = pruefungen.filter((p) => p.status === "abgeschlossen").reduce((s, p) => s + (p.studierende ?? 0), 0);
-  const total       = pruefungen.reduce((s, p) => s + (p.studierende ?? 0), 0);
-  const offen       = pruefungen.filter((p) => p.status !== "abgeschlossen").length;
+  const gesamt   = pruefungen.length;
+  const offen    = pruefungen.filter((p) => p.status !== "abgeschlossen").length;
+  const bewertet = pruefungen
+    .filter((p) => p.status === "abgeschlossen")
+    .reduce((s, p) => s + (p.studierende ?? 0), 0);
+  const total    = pruefungen.reduce((s, p) => s + (p.studierende ?? 0), 0);
+  const abgeProzent = gesamt > 0 ? Math.round(((gesamt - offen) / gesamt) * 100) : 0;
 
   return (
     <div style={{ padding: "32px 36px", maxWidth: "1100px" }}>
@@ -111,7 +116,7 @@ export default function OverviewPage({ onNeuePruefung }) {
         </button>
       </div>
 
-      {/* Stats – aus Prüfungsdaten abgeleitet */}
+      {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "24px" }}>
         <StatCard
           title="Prüfungen gesamt"
@@ -127,13 +132,13 @@ export default function OverviewPage({ onNeuePruefung }) {
         />
         <StatCard
           title="Abgeschlossen"
-          value={loading ? "–" : `${gesamt > 0 ? Math.round(((gesamt - offen) / gesamt) * 100) : 0}%`}
+          value={loading ? "–" : `${abgeProzent}%`}
           sub="Prüfungen fertig"
           color="#8b6914"
         />
       </div>
 
-      {/* Aktuelle Prüfungen */}
+      {/* Prüfungsliste */}
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
           <h2 style={{ fontSize: "0.72rem", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.06em", color: "#999" }}>
@@ -141,19 +146,16 @@ export default function OverviewPage({ onNeuePruefung }) {
           </h2>
         </div>
 
-        {loading && (
-          <p style={{ color: "#999", fontSize: "0.875rem", padding: "16px 0" }}>Lade Prüfungen…</p>
-        )}
+        {loading && <p style={hinweisStyle}>Lade Prüfungen…</p>}
+
         {fehler && (
-          <div style={fehlerBoxStyle}>
-            <strong>Fehler:</strong> {fehler}
-          </div>
+          <div style={fehlerBoxStyle}><strong>Fehler:</strong> {fehler}</div>
         )}
+
         {!loading && !fehler && pruefungen.length === 0 && (
-          <p style={{ color: "#999", fontSize: "0.875rem", padding: "16px 0" }}>
-            Keine Prüfungen vorhanden.
-          </p>
+          <p style={hinweisStyle}>Keine Prüfungen vorhanden.</p>
         )}
+
         {!loading && !fehler && pruefungen.map((p) => (
           <PruefungItem
             key={p.id}
@@ -164,7 +166,7 @@ export default function OverviewPage({ onNeuePruefung }) {
         ))}
       </div>
 
-      {/* Chart + Notenschlüssel */}
+      {/* Notenverteilung + Notenschlüssel */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
         <div style={card}>
           <NotenverteilungChart pruefungId={selectedId} />
@@ -190,6 +192,8 @@ const card = {
   marginBottom: "16px",
   boxShadow: "0 1px 3px rgba(0,0,0,0.07)",
 };
+
+const hinweisStyle = { color: "#999", fontSize: "0.875rem", padding: "12px 0" };
 
 const fehlerBoxStyle = {
   backgroundColor: "#fff3f3",
