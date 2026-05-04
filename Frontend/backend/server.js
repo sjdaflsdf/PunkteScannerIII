@@ -73,6 +73,53 @@ app.get("/api/notenschluessel", (req, res) => {
 });
 
 // ─── ENDPUNKT 5 ───────────────────────────────────────────
+// Neue Prüfung anlegen (inkl. Aufgaben)
+app.post("/api/pruefungen", async (req, res) => {
+  const { aufgaben, ...pruefungData } = req.body;
+  try {
+    const pruefungRes = await fetch(`${DB_URL}/pruefungen`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(pruefungData),
+    });
+    if (!pruefungRes.ok) {
+      const err = await pruefungRes.json().catch(() => ({}));
+      return res.status(pruefungRes.status).json(err);
+    }
+    const pruefung = await pruefungRes.json();
+    if (aufgaben && aufgaben.length > 0) {
+      for (const aufgabe of aufgaben) {
+        await fetch(`${DB_URL}/aufgaben`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pruefung: { id: pruefung.id },
+            aufgabeNr: aufgabe.aufgabeNr,
+            maxPunkte: aufgabe.maxPunkte,
+          }),
+        });
+      }
+    }
+    res.status(201).json(pruefung);
+  } catch (err) {
+    console.error("Fehler beim Anlegen der Prüfung:", err.message);
+    res.status(500).json({ fehler: "DB nicht erreichbar." });
+  }
+});
+
+// ─── ENDPUNKT 5b ──────────────────────────────────────────
+// Aufgaben einer Prüfung laden
+app.get("/api/pruefungen/:id/aufgaben", async (req, res) => {
+  try {
+    const response = await fetch(`${DB_URL}/aufgaben/pruefung/${req.params.id}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ fehler: "DB nicht erreichbar." });
+  }
+});
+
+// ─── ENDPUNKT 6 ───────────────────────────────────────────
 // Mehrere Studis auf einmal auswerten (für die Tabelle)
 app.post("/api/pruefungen/batch", async (req, res) => {
   const { pruefungen, notenschluessel } = req.body;

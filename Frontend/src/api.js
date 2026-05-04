@@ -1,4 +1,5 @@
-const BASE_URL = "http://localhost:3000";
+export const API = "http://localhost:3000";
+const BASE_URL = API;
 
 async function request(path, options = {}) {
   let res;
@@ -24,8 +25,17 @@ export const api = {
   getPruefungen: () =>
     request("/api/pruefungen"),
 
+  createPruefung: (data) =>
+    request("/api/pruefungen", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   getPruefungErgebnisse: (id) =>
     request(`/api/pruefungen/${id}/ergebnisse`),
+
+  getAufgaben: (pruefungId) =>
+    request(`/api/pruefungen/${pruefungId}/aufgaben`),
 
   getNotenschluessel: () =>
     request("/api/notenschluessel"),

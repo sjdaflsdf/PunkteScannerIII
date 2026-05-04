@@ -106,15 +106,18 @@ export default function PruefungenPage({ onNeuePruefung, onAuswerten }) {
                 }}>
                   {badge.label}
                 </span>
-                <button style={{
-                  border: "1px solid #d8d8d8",
-                  background: "white",
-                  padding: "5px 16px",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontSize: "0.82rem",
-                  color: "#444",
-                }}>
+                <button
+                  onClick={() => onPruefungOeffnen?.(p)}
+                  style={{
+                    border: "1px solid #d8d8d8",
+                    background: "white",
+                    padding: "5px 16px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.82rem",
+                    color: "#444",
+                  }}
+                >
                   Öffnen
                 </button>
               </div>
