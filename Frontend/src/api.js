@@ -1,4 +1,5 @@
-const BASE_URL = "http://localhost:3000";
+export const API = "http://localhost:3000";
+const BASE_URL = API;
 
 async function request(path, options = {}) {
   let res;
