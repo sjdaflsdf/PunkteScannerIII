@@ -14,7 +14,7 @@ function getStatusBadge(status) {
   return { label: "Entwurf", bg: "#f5f5f5", color: "#757575" };
 }
 
-function PruefungItem({ pruefung }) {
+function PruefungItem({ pruefung, onPruefungOeffnen }) {
   const badge = getStatusBadge(pruefung.status);
   const datum = pruefung.datum
     ? new Date(pruefung.datum).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" })
@@ -48,15 +48,18 @@ function PruefungItem({ pruefung }) {
         }}>
           {badge.label}
         </span>
-        <button style={{
-          border: "1px solid #d8d8d8",
-          background: "white",
-          padding: "5px 16px",
-          borderRadius: "6px",
-          cursor: "pointer",
-          fontSize: "0.82rem",
-          color: "#444",
-        }}>
+        <button
+          onClick={() => onPruefungOeffnen?.(pruefung)}
+          style={{
+            border: "1px solid #d8d8d8",
+            background: "white",
+            padding: "5px 16px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "0.82rem",
+            color: "#444",
+          }}
+        >
           Öffnen
         </button>
       </div>
@@ -64,7 +67,7 @@ function PruefungItem({ pruefung }) {
   );
 }
 
-export default function OverviewPage({ onNeuePruefung }) {
+export default function OverviewPage({ onNeuePruefung, onPruefungOeffnen }) {
   const [pruefungen, setPruefungen] = useState([]);
   const [laden, setLaden] = useState(true);
   const [fehler, setFehler] = useState(null);
@@ -146,7 +149,9 @@ export default function OverviewPage({ onNeuePruefung }) {
         ) : pruefungen.length === 0 ? (
           <p style={{ color: "#aaa", fontSize: "0.875rem", padding: "16px 0" }}>Keine Prüfungen gefunden.</p>
         ) : (
-          pruefungen.map((p) => <PruefungItem key={p.id} pruefung={p} />)
+          pruefungen.map((p) => (
+            <PruefungItem key={p.id} pruefung={p} onPruefungOeffnen={onPruefungOeffnen} />
+          ))
         )}
       </div>
 

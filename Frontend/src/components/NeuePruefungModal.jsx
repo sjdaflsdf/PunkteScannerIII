@@ -1,22 +1,22 @@
 import { useState } from "react";
 import { api } from "../api";
 
-const LEERE_AUFGABE = { name: "", punkte: "", maxPunkte: "" };
-
-export default function UploadModal({ onClose, onErgebnis }) {
-  const [pruefungName, setPruefungName] = useState("");
-  const [aufgaben, setAufgaben] = useState([{ ...LEERE_AUFGABE }]);
+export default function NeuePruefungModal({ onClose, onErfolgreich }) {
+  const [name, setName] = useState("");
+  const [datum, setDatum] = useState("");
+  const [status, setStatus] = useState("entwurf");
+  const [aufgaben, setAufgaben] = useState([{ maxPunkte: "" }]);
   const [loading, setLoading] = useState(false);
   const [fehler, setFehler] = useState(null);
 
-  function aufgabeAendern(index, feld, wert) {
+  function aufgabeAendern(index, wert) {
     setAufgaben((prev) =>
-      prev.map((a, i) => (i === index ? { ...a, [feld]: wert } : a))
+      prev.map((a, i) => (i === index ? { maxPunkte: wert } : a))
     );
   }
 
   function aufgabeHinzufuegen() {
-    setAufgaben((prev) => [...prev, { ...LEERE_AUFGABE }]);
+    setAufgaben((prev) => [...prev, { maxPunkte: "" }]);
   }
 
   function aufgabeEntfernen(index) {
@@ -27,8 +27,12 @@ export default function UploadModal({ onClose, onErgebnis }) {
     e.preventDefault();
     setFehler(null);
 
-    if (!pruefungName.trim()) {
+    if (!name.trim()) {
       setFehler("Bitte einen Prüfungsnamen eingeben.");
+      return;
+    }
+    if (!datum) {
+      setFehler("Bitte ein Datum eingeben.");
       return;
     }
     if (aufgaben.length === 0) {
@@ -36,32 +40,27 @@ export default function UploadModal({ onClose, onErgebnis }) {
       return;
     }
     for (const [i, a] of aufgaben.entries()) {
-      if (!a.name.trim()) {
-        setFehler(`Aufgabe ${i + 1}: Name fehlt.`);
-        return;
-      }
-      if (a.punkte === "" || a.maxPunkte === "") {
-        setFehler(`Aufgabe ${i + 1}: Punkte fehlen.`);
-        return;
-      }
-      if (Number(a.punkte) > Number(a.maxPunkte)) {
-        setFehler(`Aufgabe ${i + 1}: Erreichte Punkte übersteigen Maximum.`);
+      if (!a.maxPunkte || Number(a.maxPunkte) < 1) {
+        setFehler(`Aufgabe ${i + 1}: Maximalpunkte fehlen oder ungültig.`);
         return;
       }
     }
 
+    const maxPunkte = aufgaben.reduce((s, a) => s + Number(a.maxPunkte), 0);
+
     setLoading(true);
     try {
-      const payload = {
-        pruefungName: pruefungName.trim(),
-        aufgaben: aufgaben.map((a) => ({
-          name: a.name.trim(),
-          punkte: Number(a.punkte),
+      await api.createPruefung({
+        name: name.trim(),
+        datum,
+        status,
+        maxPunkte,
+        aufgaben: aufgaben.map((a, i) => ({
+          aufgabeNr: i + 1,
           maxPunkte: Number(a.maxPunkte),
         })),
-      };
-      const result = await api.auswerten(payload);
-      onErgebnis(result);
+      });
+      onErfolgreich();
     } catch (err) {
       setFehler(err.message);
     } finally {
@@ -86,67 +85,70 @@ export default function UploadModal({ onClose, onErgebnis }) {
         backgroundColor: "white",
         borderRadius: "16px",
         padding: "32px",
-        width: "520px",
+        width: "480px",
         maxWidth: "95vw",
         maxHeight: "90vh",
         overflowY: "auto",
         boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
       }}>
-        <h2 style={{ fontSize: "1.2rem", marginBottom: "6px" }}>Prüfung auswerten</h2>
+        <h2 style={{ fontSize: "1.2rem", marginBottom: "6px" }}>Neue Prüfung anlegen</h2>
         <p style={{ color: "#888", fontSize: "0.875rem", marginBottom: "24px" }}>
-          Prüfungsname und Aufgabenpunkte eingeben.
+          Prüfungsname, Datum und Aufgaben eingeben.
         </p>
 
         <form onSubmit={handleSubmit}>
-
-          {/* Prüfungsname */}
-          <div style={{ marginBottom: "20px" }}>
+          <div style={{ marginBottom: "16px" }}>
             <label style={labelStyle}>Prüfungsname</label>
             <input
               type="text"
-              value={pruefungName}
-              onChange={(e) => setPruefungName(e.target.value)}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               placeholder="z. B. Datenbanken II"
               disabled={loading}
               style={inputStyle}
             />
           </div>
 
-          {/* Aufgaben */}
-          <div style={{ marginBottom: "8px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-              <label style={labelStyle}>Aufgaben</label>
-              <span style={{ fontSize: "0.75rem", color: "#999" }}>
-                Erreicht / Maximum
-              </span>
-            </div>
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelStyle}>Datum</label>
+            <input
+              type="date"
+              value={datum}
+              onChange={(e) => setDatum(e.target.value)}
+              disabled={loading}
+              style={inputStyle}
+            />
+          </div>
 
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelStyle}>Status</label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              disabled={loading}
+              style={inputStyle}
+            >
+              <option value="entwurf">Entwurf</option>
+              <option value="in_bearbeitung">In Bearbeitung</option>
+              <option value="abgeschlossen">Abgeschlossen</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: "8px" }}>
+            <label style={{ ...labelStyle, marginBottom: "10px" }}>
+              Aufgaben (Maximalpunkte je Aufgabe)
+            </label>
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {aufgaben.map((aufgabe, i) => (
                 <div key={i} style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <input
-                    type="text"
-                    value={aufgabe.name}
-                    onChange={(e) => aufgabeAendern(i, "name", e.target.value)}
-                    placeholder={`Aufgabe ${i + 1}`}
-                    disabled={loading}
-                    style={{ ...inputStyle, flex: 2 }}
-                  />
-                  <input
-                    type="number"
-                    value={aufgabe.punkte}
-                    onChange={(e) => aufgabeAendern(i, "punkte", e.target.value)}
-                    placeholder="0"
-                    min="0"
-                    disabled={loading}
-                    style={{ ...inputStyle, flex: 1, textAlign: "center" }}
-                  />
-                  <span style={{ color: "#ccc", flexShrink: 0 }}>/</span>
+                  <span style={{ fontSize: "0.85rem", color: "#666", flexShrink: 0, minWidth: "76px" }}>
+                    Aufgabe {i + 1}
+                  </span>
                   <input
                     type="number"
                     value={aufgabe.maxPunkte}
-                    onChange={(e) => aufgabeAendern(i, "maxPunkte", e.target.value)}
-                    placeholder="10"
+                    onChange={(e) => aufgabeAendern(i, e.target.value)}
+                    placeholder="Max. Punkte"
                     min="1"
                     disabled={loading}
                     style={{ ...inputStyle, flex: 1, textAlign: "center" }}
@@ -170,7 +172,6 @@ export default function UploadModal({ onClose, onErgebnis }) {
                 </div>
               ))}
             </div>
-
             <button
               type="button"
               onClick={aufgabeHinzufuegen}
@@ -191,7 +192,6 @@ export default function UploadModal({ onClose, onErgebnis }) {
             </button>
           </div>
 
-          {/* Fehlerbox */}
           {fehler && (
             <div style={{
               marginTop: "16px",
@@ -206,7 +206,6 @@ export default function UploadModal({ onClose, onErgebnis }) {
             </div>
           )}
 
-          {/* Buttons */}
           <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "24px" }}>
             <button
               type="button"
@@ -239,10 +238,9 @@ export default function UploadModal({ onClose, onErgebnis }) {
                 opacity: loading ? 0.7 : 1,
               }}
             >
-              {loading ? "Wird ausgewertet…" : "Auswerten"}
+              {loading ? "Wird gespeichert…" : "Prüfung anlegen"}
             </button>
           </div>
-
         </form>
       </div>
     </div>

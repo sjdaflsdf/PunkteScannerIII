@@ -24,8 +24,17 @@ export const api = {
   getPruefungen: () =>
     request("/api/pruefungen"),
 
+  createPruefung: (data) =>
+    request("/api/pruefungen", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   getPruefungErgebnisse: (id) =>
     request(`/api/pruefungen/${id}/ergebnisse`),
+
+  getAufgaben: (pruefungId) =>
+    request(`/api/pruefungen/${pruefungId}/aufgaben`),
 
   getNotenschluessel: () =>
     request("/api/notenschluessel"),

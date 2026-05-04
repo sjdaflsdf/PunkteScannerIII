@@ -9,7 +9,7 @@ function getStatusBadge(status) {
   return { label: "Entwurf", bg: "#f5f5f5", color: "#757575" };
 }
 
-export default function PruefungenPage({ onNeuePruefung }) {
+export default function PruefungenPage({ onNeuePruefung, onPruefungOeffnen }) {
   const [pruefungen, setPruefungen] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fehler, setFehler] = useState(null);
@@ -89,15 +89,18 @@ export default function PruefungenPage({ onNeuePruefung }) {
                 }}>
                   {badge.label}
                 </span>
-                <button style={{
-                  border: "1px solid #d8d8d8",
-                  background: "white",
-                  padding: "5px 16px",
-                  borderRadius: "6px",
-                  cursor: "pointer",
-                  fontSize: "0.82rem",
-                  color: "#444",
-                }}>
+                <button
+                  onClick={() => onPruefungOeffnen?.(p)}
+                  style={{
+                    border: "1px solid #d8d8d8",
+                    background: "white",
+                    padding: "5px 16px",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "0.82rem",
+                    color: "#444",
+                  }}
+                >
                   Öffnen
                 </button>
               </div>
