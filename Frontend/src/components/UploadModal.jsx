@@ -228,7 +228,7 @@ export default function UploadModal({ onClose, onErgebnis }) {
               type="submit"
               disabled={loading}
               style={{
-                backgroundColor: dateien.length ? "#2d5a4b" : "#a0b8b2",
+                backgroundColor: "#2d5a4b",
                 color: "white",
                 border: "none",
                 padding: "8px 20px",
