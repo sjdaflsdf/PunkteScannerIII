@@ -6,10 +6,12 @@ import NotenschluesselPage from "./pages/NotenschluesselPage";
 import ExportPage from "./pages/ExportPage";
 import ErgebnisPage from "./pages/ErgebnisPage";
 import UploadModal from "./components/UploadModal";
+import PruefungAnlegenModal from "./components/PruefungAnlegenModal";
 
 export default function App() {
   const [activePage, setActivePage] = useState("uebersicht");
   const [showUpload, setShowUpload] = useState(false);
+  const [showAnlegen, setShowAnlegen] = useState(false);
   const [ergebnis, setErgebnis] = useState(null);
 
   function handleErgebnis(result) {
@@ -33,15 +35,30 @@ export default function App() {
     }
     switch (activePage) {
       case "uebersicht":
-        return <OverviewPage onNeuePruefung={() => setShowUpload(true)} />;
+        return (
+          <OverviewPage
+            onNeuePruefung={() => setShowAnlegen(true)}
+            onAuswerten={() => setShowUpload(true)}
+          />
+        );
       case "pruefungen":
-        return <PruefungenPage onNeuePruefung={() => setShowUpload(true)} />;
+        return (
+          <PruefungenPage
+            onNeuePruefung={() => setShowAnlegen(true)}
+            onAuswerten={() => setShowUpload(true)}
+          />
+        );
       case "notenschluessel":
         return <NotenschluesselPage />;
       case "export":
         return <ExportPage />;
       default:
-        return <OverviewPage onNeuePruefung={() => setShowUpload(true)} />;
+        return (
+          <OverviewPage
+            onNeuePruefung={() => setShowAnlegen(true)}
+            onAuswerten={() => setShowUpload(true)}
+          />
+        );
     }
   }
 
@@ -51,6 +68,12 @@ export default function App() {
       <main style={{ flex: 1, overflowY: "auto", backgroundColor: "#f0f2f0" }}>
         {renderPage()}
       </main>
+      {showAnlegen && (
+        <PruefungAnlegenModal
+          onClose={() => setShowAnlegen(false)}
+          onAngelegt={() => {}}
+        />
+      )}
       {showUpload && (
         <UploadModal
           onClose={() => setShowUpload(false)}

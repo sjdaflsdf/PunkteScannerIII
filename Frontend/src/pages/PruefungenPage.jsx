@@ -9,7 +9,7 @@ function getStatusBadge(status) {
   return { label: "Entwurf", bg: "#f5f5f5", color: "#757575" };
 }
 
-export default function PruefungenPage({ onNeuePruefung }) {
+export default function PruefungenPage({ onNeuePruefung, onAuswerten }) {
   const [pruefungen, setPruefungen] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fehler, setFehler] = useState(null);
@@ -25,21 +25,38 @@ export default function PruefungenPage({ onNeuePruefung }) {
     <div style={{ padding: "32px 36px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <h1 style={{ fontSize: "1.4rem", fontWeight: "600" }}>Prüfungen</h1>
-        <button
-          onClick={onNeuePruefung}
-          style={{
-            backgroundColor: "#2d5a4b",
-            color: "white",
-            border: "none",
-            borderRadius: "8px",
-            padding: "10px 18px",
-            cursor: "pointer",
-            fontSize: "0.875rem",
-            fontWeight: "500",
-          }}
-        >
-          + Neue Prüfung
-        </button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            onClick={onNeuePruefung}
+            style={{
+              backgroundColor: "#2d5a4b",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              padding: "10px 18px",
+              cursor: "pointer",
+              fontSize: "0.875rem",
+              fontWeight: "500",
+            }}
+          >
+            + Prüfung anlegen
+          </button>
+          <button
+            onClick={onAuswerten}
+            style={{
+              backgroundColor: "white",
+              color: "#2d5a4b",
+              border: "1.5px solid #2d5a4b",
+              borderRadius: "8px",
+              padding: "10px 18px",
+              cursor: "pointer",
+              fontSize: "0.875rem",
+              fontWeight: "500",
+            }}
+          >
+            Klausur auswerten
+          </button>
+        </div>
       </div>
 
       <div style={{ backgroundColor: "white", borderRadius: "12px", padding: "8px 24px", boxShadow: "0 1px 3px rgba(0,0,0,0.07)" }}>

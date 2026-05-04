@@ -16,15 +16,17 @@ public class Aufgabe {
 
     private int aufgabeNr;
     private int maxPunkte;
+    private String bezeichnung;
 
 
     public Aufgabe() {}
 
 
-    public Aufgabe(Pruefung pruefung, int aufgabeNr, int maxPunkte) {
+    public Aufgabe(Pruefung pruefung, int aufgabeNr, int maxPunkte, String bezeichnung) {
         this.pruefung = pruefung;
         this.aufgabeNr = aufgabeNr;
         this.maxPunkte = maxPunkte;
+        this.bezeichnung = bezeichnung;
     }
 
     public Long getId() { return id; }
@@ -42,5 +44,10 @@ public class Aufgabe {
     public int getMaxPunkte() { return maxPunkte; }
     public void setMaxPunkte(int maxPunkte) {
         this.maxPunkte = maxPunkte;
+    }
+
+    public String getBezeichnung() { return bezeichnung; }
+    public void setBezeichnung(String bezeichnung) {
+        this.bezeichnung = bezeichnung;
     }
 }

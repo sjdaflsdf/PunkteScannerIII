@@ -63,7 +63,7 @@ function PruefungItem({ pruefung, isSelected, onSelect }) {
   );
 }
 
-export default function OverviewPage({ onNeuePruefung }) {
+export default function OverviewPage({ onNeuePruefung, onAuswerten }) {
   const [pruefungen, setPruefungen] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fehler, setFehler] = useState(null);
@@ -98,22 +98,40 @@ export default function OverviewPage({ onNeuePruefung }) {
             Sommersemester 2026 · THWS Würzburg-Schweinfurt
           </p>
         </div>
-        <button
-          onClick={onNeuePruefung}
-          style={{
-            backgroundColor: "#2d5a4b",
-            color: "white",
-            border: "none",
-            borderRadius: "8px",
-            padding: "10px 18px",
-            cursor: "pointer",
-            fontSize: "0.875rem",
-            fontWeight: "500",
-            whiteSpace: "nowrap",
-          }}
-        >
-          + Neue Prüfung
-        </button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            onClick={onNeuePruefung}
+            style={{
+              backgroundColor: "#2d5a4b",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              padding: "10px 18px",
+              cursor: "pointer",
+              fontSize: "0.875rem",
+              fontWeight: "500",
+              whiteSpace: "nowrap",
+            }}
+          >
+            + Prüfung anlegen
+          </button>
+          <button
+            onClick={onAuswerten}
+            style={{
+              backgroundColor: "white",
+              color: "#2d5a4b",
+              border: "1.5px solid #2d5a4b",
+              borderRadius: "8px",
+              padding: "10px 18px",
+              cursor: "pointer",
+              fontSize: "0.875rem",
+              fontWeight: "500",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Klausur auswerten
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
