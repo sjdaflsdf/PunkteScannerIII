@@ -8,7 +8,6 @@ import PruefungDetail from "./pages/PruefungDetail";
 import NotenschluesselPage from "./pages/NotenschluesselPage";
 import ExportPage from "./pages/ExportPage";
 import ErgebnisPage from "./pages/ErgebnisPage";
-import UploadModal from "./components/UploadModal";
 import PruefungAnlegenModal from "./components/PruefungAnlegenModal";
 
 export default function App() {
