@@ -5,13 +5,13 @@ import jakarta.persistence.*;
 import java.time.LocalDate;
 
 @Entity
-@Table (name="Pruefung")
+@Table (name="pruefung")
 
 public class Pruefung {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name="professor_id")
     private Professor professor;
     private String name;
@@ -54,7 +54,7 @@ public class Pruefung {
 
     public int getMaxPunkte() {return maxPunkte;}
 
-    public void setMaxPunkte(int max_punkte) {this.maxPunkte = maxPunkte;}
+    public void setMaxPunkte(int maxPunkte) {this.maxPunkte = maxPunkte;}
 
     public String getStatus() {return status;}
 

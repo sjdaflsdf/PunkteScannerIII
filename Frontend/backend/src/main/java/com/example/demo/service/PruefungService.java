@@ -31,7 +31,8 @@ import java.util.Optional;
         // Neue Prüfung erstellen
         public Pruefung createPruefung(Pruefung pruefung) {
             pruefung.setStatus("ENTWURF");
-            return pruefungRepository.save(pruefung);
+            Pruefung gespeichert = pruefungRepository.save(pruefung);
+            return pruefungRepository.findById(gespeichert.getId()).orElseThrow();
         }
 
         // Prüfung bearbeiten
