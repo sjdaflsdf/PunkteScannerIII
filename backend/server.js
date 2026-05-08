@@ -1,7 +1,8 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
-const Anthropic = require("@anthropic-ai/sdk");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { pruefungAuswerten, DEFAULT_NOTENSCHLUESSEL } = require("./logik");
 
 const app = express();
@@ -179,8 +180,8 @@ app.post("/api/studenten", async (req, res) => {
 // ─── ENDPUNKT 7 ───────────────────────────────────────────
 // OCR: Gescannte Klausurseiten → Matrikelnummer + Punkte extrahieren
 app.post("/api/ocr/scan", upload.array("dateien", 30), async (req, res) => {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return res.status(500).json({ fehler: "ANTHROPIC_API_KEY ist nicht gesetzt. Bitte in der .env-Datei eintragen." });
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(500).json({ fehler: "GEMINI_API_KEY ist nicht gesetzt. Bitte in der .env-Datei eintragen." });
   }
 
   const { pruefungId } = req.body;
@@ -204,11 +205,7 @@ app.post("/api/ocr/scan", upload.array("dateien", 30), async (req, res) => {
   const maxPunkteProAufgabe = aufgaben.map(a => a.maxPunkte).join(", ");
   const anzahlAufgaben = aufgaben.length;
 
-  // Content-Blöcke für Claude aufbauen: erst Text-Prompt, dann alle Bilder/PDFs
-  const contentBlocks = [
-    {
-      type: "text",
-      text: `Diese Bilder zeigen eine oder mehrere Seiten einer deutschen Universitäts-Klausur mit ${anzahlAufgaben} Aufgaben.
+  const prompt = `Diese Bilder zeigen eine oder mehrere Seiten einer deutschen Universitäts-Klausur mit ${anzahlAufgaben} Aufgaben.
 
 Aufbau des Templates:
 - Kopfzeile (wiederholt auf jeder Seite): Klausurname, Datum, Maximalpunkte. Ganz rechts zwei kurze Unterstriche: "Name: ___" und "Matrikel: ___"
@@ -226,33 +223,24 @@ Antworte AUSSCHLIESSLICH mit diesem JSON-Format (kein Markdown, keine Erklärung
 Wichtig:
 - Die "punkte"-Liste muss exakt ${anzahlAufgaben} Einträge haben
 - Falls ein Wert nicht lesbar oder leer ist, verwende null
-- Nur die Zahl eintragen, nicht "8/10", nur "8"`
-    }
-  ];
+- Nur die Zahl eintragen, nicht "8/10", nur "8"`;
 
+  const contentParts = [prompt];
   for (const file of req.files) {
-    if (file.mimetype === "application/pdf") {
-      contentBlocks.push({
-        type: "document",
-        source: { type: "base64", media_type: "application/pdf", data: file.buffer.toString("base64") },
-      });
-    } else {
-      contentBlocks.push({
-        type: "image",
-        source: { type: "base64", media_type: file.mimetype, data: file.buffer.toString("base64") },
-      });
-    }
+    contentParts.push({
+      inlineData: {
+        mimeType: file.mimetype,
+        data: file.buffer.toString("base64"),
+      },
+    });
   }
 
   try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const message = await anthropic.messages.create({
-      model: "claude-opus-4-7",
-      max_tokens: 300,
-      messages: [{ role: "user", content: contentBlocks }],
-    });
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(contentParts);
 
-    const text = message.content[0].text.trim().replace(/^```json?\s*/i, "").replace(/```\s*$/i, "").trim();
+    const text = result.response.text().trim().replace(/^```json?\s*/i, "").replace(/```\s*$/i, "").trim();
     let extracted;
     try {
       extracted = JSON.parse(text);
