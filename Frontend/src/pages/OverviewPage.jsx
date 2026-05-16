@@ -14,7 +14,7 @@ function getStatusBadge(status) {
   return { label: "Entwurf", bg: "#f5f5f5", color: "#757575" };
 }
 
-function PruefungItem({ pruefung, onPruefungOeffnen }) {
+function PruefungItem({ pruefung, onPruefungOeffnen, onLoeschen }) {
   const badge = getStatusBadge(pruefung.status);
   const datum = pruefung.datum
     ? new Date(pruefung.datum).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" })
@@ -37,6 +37,14 @@ function PruefungItem({ pruefung, onPruefungOeffnen }) {
         </p>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0, marginLeft: "16px" }}>
+        {pruefung.lokal && (
+          <span style={{
+            backgroundColor: "#fff8e1", color: "#a16800",
+            padding: "4px 10px", borderRadius: "20px",
+            fontSize: "0.78rem", fontWeight: "500",
+            whiteSpace: "nowrap", border: "1px solid #ffe082",
+          }}>Lokal</span>
+        )}
         <span style={{
           backgroundColor: badge.bg,
           color: badge.color,
@@ -62,17 +70,37 @@ function PruefungItem({ pruefung, onPruefungOeffnen }) {
         >
           Öffnen
         </button>
+        {pruefung.lokal && (
+          <button
+            onClick={() => {
+              if (window.confirm(`"${pruefung.name}" wirklich löschen?`)) onLoeschen(pruefung.id);
+            }}
+            style={{
+              border: "1px solid #fcc",
+              background: "white",
+              padding: "5px 10px",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "0.82rem",
+              color: "#e57373",
+            }}
+          >
+            Löschen
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
-export default function OverviewPage({ onNeuePruefung, onPruefungOeffnen }) {
+export default function OverviewPage({ onNeuePruefung, onNeuePruefungLokal, onAuswerten, onPruefungOeffnen }) {
   const [pruefungen, setPruefungen] = useState([]);
+  const [lokalePruefungen, setLokalePruefungen] = useState([]);
   const [laden, setLaden] = useState(true);
   const [fehler, setFehler] = useState(null);
 
   useEffect(() => {
+    setLokalePruefungen(JSON.parse(localStorage.getItem("pruefungen_lokal") || "[]"));
     fetch(`${API}/api/pruefungen`)
       .then((r) => r.json())
       .then((daten) => {
@@ -85,8 +113,15 @@ export default function OverviewPage({ onNeuePruefung, onPruefungOeffnen }) {
       });
   }, []);
 
-  const anzahlPruefungen = pruefungen.length;
-  const offene = pruefungen.filter((p) =>
+  function lokalePruefungLoeschen(id) {
+    const aktualisiert = lokalePruefungen.filter((p) => p.id !== id);
+    localStorage.setItem("pruefungen_lokal", JSON.stringify(aktualisiert));
+    setLokalePruefungen(aktualisiert);
+  }
+
+  const allePruefungen = [...pruefungen, ...lokalePruefungen];
+  const anzahlPruefungen = allePruefungen.length;
+  const offene = allePruefungen.filter((p) =>
     (p.status ?? "").toLowerCase() !== "abgeschlossen"
   ).length;
 
@@ -101,22 +136,57 @@ export default function OverviewPage({ onNeuePruefung, onPruefungOeffnen }) {
             Sommersemester 2026 · THWS Würzburg-Schweinfurt
           </p>
         </div>
-        <button
-          onClick={onNeuePruefung}
-          style={{
-            backgroundColor: "#2d5a4b",
-            color: "white",
-            border: "none",
-            borderRadius: "8px",
-            padding: "10px 18px",
-            cursor: "pointer",
-            fontSize: "0.875rem",
-            fontWeight: "500",
-            whiteSpace: "nowrap",
-          }}
-        >
-          + Neue Prüfung
-        </button>
+        <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            onClick={onNeuePruefung}
+            style={{
+              backgroundColor: "#2d5a4b",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              padding: "10px 18px",
+              cursor: "pointer",
+              fontSize: "0.875rem",
+              fontWeight: "500",
+              whiteSpace: "nowrap",
+            }}
+          >
+            + Prüfung anlegen
+          </button>
+          <button
+            onClick={onNeuePruefungLokal}
+            title="Prüfung nur im Browser anlegen – kein Server nötig"
+            style={{
+              backgroundColor: "white",
+              color: "#2d5a4b",
+              border: "1.5px solid #2d5a4b",
+              borderRadius: "8px",
+              padding: "10px 18px",
+              cursor: "pointer",
+              fontSize: "0.875rem",
+              fontWeight: "500",
+              whiteSpace: "nowrap",
+            }}
+          >
+            + Lokal anlegen
+          </button>
+          <button
+            onClick={onAuswerten}
+            style={{
+              backgroundColor: "white",
+              color: "#2d5a4b",
+              border: "1.5px solid #2d5a4b",
+              borderRadius: "8px",
+              padding: "10px 18px",
+              cursor: "pointer",
+              fontSize: "0.875rem",
+              fontWeight: "500",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Klausur auswerten
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -146,11 +216,11 @@ export default function OverviewPage({ onNeuePruefung, onPruefungOeffnen }) {
 
         {laden ? (
           <p style={{ color: "#aaa", fontSize: "0.875rem", padding: "16px 0" }}>Lädt...</p>
-        ) : pruefungen.length === 0 ? (
+        ) : allePruefungen.length === 0 ? (
           <p style={{ color: "#aaa", fontSize: "0.875rem", padding: "16px 0" }}>Keine Prüfungen gefunden.</p>
         ) : (
-          pruefungen.map((p) => (
-            <PruefungItem key={p.id} pruefung={p} onPruefungOeffnen={onPruefungOeffnen} />
+          allePruefungen.map((p) => (
+            <PruefungItem key={p.id} pruefung={p} onPruefungOeffnen={onPruefungOeffnen} onLoeschen={lokalePruefungLoeschen} />
           ))
         )}
       </div>

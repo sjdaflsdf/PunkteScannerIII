@@ -5,14 +5,19 @@ import UploadModal from "./components/UploadModal";
 import OverviewPage from "./pages/OverviewPage";
 import PruefungenPage from "./pages/PruefungenPage";
 import PruefungDetail from "./pages/PruefungDetail";
+import LokalePruefungDetail from "./pages/LokalePruefungDetail";
 import NotenschluesselPage from "./pages/NotenschluesselPage";
 import ExportPage from "./pages/ExportPage";
 import ErgebnisPage from "./pages/ErgebnisPage";
+import PruefungAnlegenModal from "./components/PruefungAnlegenModal";
+import LokalPruefungAnlegenModal from "./components/LokalPruefungAnlegenModal";
 
 export default function App() {
   const [activePage, setActivePage] = useState("uebersicht");
   const [showNeuePruefung, setShowNeuePruefung] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [showAnlegen, setShowAnlegen] = useState(false);
+  const [showAnlegenLokal, setShowAnlegenLokal] = useState(false);
   const [ergebnis, setErgebnis] = useState(null);
   const [selectedPruefung, setSelectedPruefung] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -33,7 +38,20 @@ export default function App() {
     setRefreshKey((k) => k + 1);
   }
 
+  function handlePruefungOeffnen(p) {
+    setErgebnis(null);
+    setSelectedPruefung(p);
+  }
+
   function renderPage() {
+    if (selectedPruefung?.lokal) {
+      return (
+        <LokalePruefungDetail
+          pruefung={selectedPruefung}
+          onZurueck={() => setSelectedPruefung(null)}
+        />
+      );
+    }
     if (selectedPruefung) {
       return (
         <PruefungDetail
@@ -54,17 +72,19 @@ export default function App() {
       case "uebersicht":
         return (
           <OverviewPage
-            key={refreshKey}
-            onNeuePruefung={() => setShowNeuePruefung(true)}
-            onPruefungOeffnen={setSelectedPruefung}
+            onNeuePruefung={() => setShowAnlegen(true)}
+            onNeuePruefungLokal={() => setShowAnlegenLokal(true)}
+            onAuswerten={() => setShowUpload(true)}
+            onPruefungOeffnen={handlePruefungOeffnen}
           />
         );
       case "pruefungen":
         return (
           <PruefungenPage
-            key={refreshKey}
-            onNeuePruefung={() => setShowNeuePruefung(true)}
-            onPruefungOeffnen={setSelectedPruefung}
+            onNeuePruefung={() => setShowAnlegen(true)}
+            onNeuePruefungLokal={() => setShowAnlegenLokal(true)}
+            onAuswerten={() => setShowUpload(true)}
+            onPruefungOeffnen={handlePruefungOeffnen}
           />
         );
       case "notenschluessel":
@@ -74,9 +94,10 @@ export default function App() {
       default:
         return (
           <OverviewPage
-            key={refreshKey}
-            onNeuePruefung={() => setShowNeuePruefung(true)}
-            onPruefungOeffnen={setSelectedPruefung}
+            onNeuePruefung={() => setShowAnlegen(true)}
+            onNeuePruefungLokal={() => setShowAnlegenLokal(true)}
+            onAuswerten={() => setShowUpload(true)}
+            onPruefungOeffnen={handlePruefungOeffnen}
           />
         );
     }
@@ -91,10 +112,19 @@ export default function App() {
       <main style={{ flex: 1, overflowY: "auto", backgroundColor: "#f0f2f0" }}>
         {renderPage()}
       </main>
-      {showNeuePruefung && (
-        <NeuePruefungModal
-          onClose={() => setShowNeuePruefung(false)}
-          onErfolgreich={handlePruefungAngelegt}
+      {showAnlegen && (
+        <PruefungAnlegenModal
+          onClose={() => setShowAnlegen(false)}
+          onAngelegt={() => {}}
+        />
+      )}
+      {showAnlegenLokal && (
+        <LokalPruefungAnlegenModal
+          onClose={() => setShowAnlegenLokal(false)}
+          onAngelegt={(pruefung) => {
+            setShowAnlegenLokal(false);
+            setSelectedPruefung(pruefung);
+          }}
         />
       )}
       {showUpload && (
