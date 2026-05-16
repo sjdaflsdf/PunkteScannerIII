@@ -250,10 +250,6 @@ app.post("/api/pruefungen/batch", async (req, res) => {
   res.json({ ergebnisse, fehler });
 });
 
-<<<<<<< HEAD
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`API läuft auf Port ${PORT}`));
-=======
 // ─── ENDPUNKT 11 ──────────────────────────────────────────
 // OCR: Klausurseiten scannen → Matrikelnummer + Punkte extrahieren
 app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
@@ -264,7 +260,6 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
   try {
     const { createWorker } = require("tesseract.js");
 
-    // Zwei Durchläufe: einmal für Text (Kopf), einmal Ziffern-fokussiert (Punkte)
     const workerText = await createWorker("deu");
     const workerZahlen = await createWorker("deu");
     await workerZahlen.setParameters({ tessedit_char_whitelist: "0123456789.," });
@@ -281,38 +276,26 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
     await workerZahlen.terminate();
 
     const gesamtText = alleTexte.join("\n");
-    const zahlenText = alleZahlenTexte.join("\n");
 
-    // ── Matrikelnummer ──
-    // Suche erst nach "Matrikelnummer" oder "Matrikel" Label, dann die nächste 7-8 stellige Zahl
     let matrikelnummer = null;
     const matrikelNachLabel = gesamtText.match(/(?:Matrikelnummer|Matrikel)[^\d]{0,20}(\d{7,8})/i);
     if (matrikelNachLabel) {
       matrikelnummer = matrikelNachLabel[1];
     } else {
-      // Fallback: erste 7-8 stellige Zahl im gesamten Text
       const fallback = gesamtText.match(/\b(\d{7,8})\b/);
       if (fallback) matrikelnummer = fallback[1];
     }
 
-    // ── Summentabelle auslesen ──
-    // Template erzeugt: "Aufgabe | Max. Pkt. | Erreicht" → Zeilen "1  10  [handschrift]"
-    // Strategie: Zeilen nach der Tabellenüberschrift parsen
     const aufgaben = [];
-
-    // Primär: Summentabelle finden — nach "Aufgabe" + "Pkt" + "Erreicht" Header
-    // Jede Datenzeile hat Form: <nr>  <maxPkt>  <erreichtPkt>
     const tabelleStart = gesamtText.search(/Aufgabe[\s\S]{0,40}Max[\s\S]{0,40}Erreicht/i);
     if (tabelleStart !== -1) {
       const tabellenText = gesamtText.slice(tabelleStart);
-      // Zeilen mit Muster: Zahl  Zahl  Zahl (Aufgabe-Nr, Max, Erreicht)
       const zeilenRegex = /^\s*(\d+)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s*$/gm;
       let m;
       while ((m = zeilenRegex.exec(tabellenText)) !== null) {
         const nr = parseInt(m[1]);
         const maxP = parseFloat(m[2].replace(",", "."));
         const erreicht = parseFloat(m[3].replace(",", "."));
-        // Gesamt-Zeile überspringen (wird separat verarbeitet)
         aufgaben.push({
           aufgabeNr: nr,
           bezeichnung: `Aufgabe ${nr}`,
@@ -322,8 +305,6 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
       }
     }
 
-    // Fallback: "Erreicht"-Felder neben den Aufgaben-Blöcken
-    // Template: "Max. Punkte\n<zahl>\nERREICHT\n<handschrift>"
     if (aufgaben.length === 0) {
       const erreichtRegex = /(?:Erreicht|ERREICHT)\s*\n\s*(\d+(?:[.,]\d+)?)/g;
       let m;
@@ -344,5 +325,5 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
   }
 });
 
-app.listen(3000, () => console.log("API läuft auf http://localhost:3000"));
->>>>>>> da000e74b58f96fb332ca017ee95fabc53687015
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`API läuft auf Port ${PORT}`));
