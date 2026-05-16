@@ -160,4 +160,5 @@ app.post("/api/pruefungen/batch", async (req, res) => {
   res.json({ ergebnisse, fehler });
 });
 
-app.listen(3000, () => console.log("API läuft auf http://localhost:3000"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`API läuft auf Port ${PORT}`));
