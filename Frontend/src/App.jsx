@@ -1,5 +1,8 @@
 import { useState } from "react";
 import Sidebar from "./components/Sidebar";
+import MobileHeader from "./components/MobileHeader";
+import MobileNavBar from "./components/MobileNavBar";
+import { useBreakpoint } from "./hooks/useBreakpoint";
 import NeuePruefungModal from "./components/NeuePruefungModal";
 import UploadModal from "./components/UploadModal";
 import OverviewPage from "./pages/OverviewPage";
@@ -18,6 +21,7 @@ import { initialisiere, aktuellerBenutzer, logout } from "./auth";
 initialisiere();
 
 export default function App() {
+  const { isMobile } = useBreakpoint();
   const [user, setUser] = useState(aktuellerBenutzer());
   const [activePage, setActivePage] = useState("uebersicht");
   const [showNeuePruefung, setShowNeuePruefung] = useState(false);
@@ -125,17 +129,8 @@ export default function App() {
     return <LoginPage onLogin={setUser} />;
   }
 
-  return (
-    <div style={{ display: "flex", minHeight: "100vh", width: "100%" }}>
-      <Sidebar
-        activePage={ergebnis || selectedPruefung ? null : activePage}
-        onNavigate={handleNavigate}
-        user={user}
-        onLogout={handleLogout}
-      />
-      <main style={{ flex: 1, overflowY: "auto", backgroundColor: "#f0f2f0" }}>
-        {renderPage()}
-      </main>
+  const modals = (
+    <>
       {showAnlegen && (
         <PruefungAnlegenModal
           onClose={() => setShowAnlegen(false)}
@@ -157,6 +152,38 @@ export default function App() {
           onErgebnis={handleErgebnis}
         />
       )}
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "#f0f2f0" }}>
+        <MobileHeader user={user} onLogout={handleLogout} />
+        <main style={{ flex: 1, overflowY: "auto", paddingTop: "56px", paddingBottom: "72px" }}>
+          {renderPage()}
+        </main>
+        <MobileNavBar
+          activePage={ergebnis || selectedPruefung ? null : activePage}
+          onNavigate={handleNavigate}
+          user={user}
+        />
+        {modals}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", width: "100%" }}>
+      <Sidebar
+        activePage={ergebnis || selectedPruefung ? null : activePage}
+        onNavigate={handleNavigate}
+        user={user}
+        onLogout={handleLogout}
+      />
+      <main style={{ flex: 1, overflowY: "auto", backgroundColor: "#f0f2f0" }}>
+        {renderPage()}
+      </main>
+      {modals}
     </div>
   );
 }

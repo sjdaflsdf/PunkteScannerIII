@@ -37,3 +37,26 @@ input {
   font-family: inherit;
   font-size: 14px;
 }
+
+/* Mobile touch improvements */
+@media (max-width: 640px) {
+  button {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  input, textarea, select {
+    font-size: 16px; /* Verhindert Auto-Zoom auf iOS */
+  }
+
+  /* Scrollbare Tabellen auf Mobile */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* iPhone Notch / Home-Bar */
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+}

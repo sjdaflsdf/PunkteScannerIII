@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useBreakpoint } from "../hooks/useBreakpoint";
 
 const NOTENSKALA = [
   { min: 95, note: 1.0 }, { min: 90, note: 1.3 }, { min: 85, note: 1.7 },
@@ -27,6 +28,7 @@ function speichereLokalePruefung(updated) {
 }
 
 export default function LokalePruefungDetail({ pruefung: initialPruefung, onZurueck, onGeloescht }) {
+  const { isMobile } = useBreakpoint();
   const [pruefung, setPruefung] = useState(initialPruefung);
   const [neueMatrikel, setNeueMatrikel] = useState("");
   const [neuePunkte, setNeuePunkte] = useState(() => initialPruefung.aufgaben.map(() => ""));
@@ -151,7 +153,7 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
   }
 
   return (
-    <div style={{ padding: "32px 36px", maxWidth: "1050px" }}>
+    <div style={{ padding: isMobile ? "16px" : "32px 36px", maxWidth: "1050px" }}>
 
       {/* Header */}
       <button onClick={onZurueck} style={zurueckBtn}>← Zurück zur Übersicht</button>
@@ -165,41 +167,13 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
             </span>
           </p>
         </div>
-        <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
-          <button
-            onClick={exportCSV}
-            disabled={ergebnisseMitNote.length === 0}
-            title={ergebnisseMitNote.length === 0 ? "Noch keine Ergebnisse vorhanden" : "Als CSV exportieren (Excel)"}
-            style={{
-              border: "1px solid #c8d8d2",
-              background: "white",
-              padding: "8px 16px",
-              borderRadius: "8px",
-              cursor: ergebnisseMitNote.length === 0 ? "default" : "pointer",
-              fontSize: "0.82rem",
-              color: ergebnisseMitNote.length === 0 ? "#bbb" : "#2d5a4b",
-              fontWeight: "500",
-            }}
-          >
-            CSV exportieren
-          </button>
-          <button
-            onClick={exportJSON}
-            disabled={ergebnisseMitNote.length === 0}
-            title={ergebnisseMitNote.length === 0 ? "Noch keine Ergebnisse vorhanden" : "Als JSON exportieren (Backup)"}
-            style={{
-              border: "1px solid #c8d8d2",
-              background: "white",
-              padding: "8px 16px",
-              borderRadius: "8px",
-              cursor: ergebnisseMitNote.length === 0 ? "default" : "pointer",
-              fontSize: "0.82rem",
-              color: ergebnisseMitNote.length === 0 ? "#bbb" : "#2d5a4b",
-              fontWeight: "500",
-            }}
-          >
-            JSON exportieren
-          </button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", flexShrink: 0 }}>
+          {!isMobile && (
+            <>
+              <button onClick={exportCSV} disabled={ergebnisseMitNote.length === 0} style={exportBtnStyle(ergebnisseMitNote.length === 0)}>CSV</button>
+              <button onClick={exportJSON} disabled={ergebnisseMitNote.length === 0} style={exportBtnStyle(ergebnisseMitNote.length === 0)}>JSON</button>
+            </>
+          )}
           <button
             onClick={() => {
               if (window.confirm(`"${pruefung.name}" wirklich löschen? Alle Ergebnisse gehen verloren.`)) {
@@ -208,24 +182,16 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
                 onZurueck();
               }
             }}
-            style={{
-              border: "1px solid #fcc",
-              background: "white",
-              padding: "8px 16px",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontSize: "0.82rem",
-              color: "#e57373",
-            }}
+            style={{ border: "1px solid #fcc", background: "white", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", fontSize: "0.82rem", color: "#e57373" }}
           >
-            Prüfung löschen
+            {isMobile ? "×" : "Prüfung löschen"}
           </button>
         </div>
       </div>
 
       {/* Stats */}
       {ergebnisseMitNote.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "14px", marginBottom: "24px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: "10px", marginBottom: "16px" }}>
           <StatBox label="Teilnehmer" value={ergebnisseMitNote.length} />
           <StatBox label="Ø Punkte" value={`${durchschnittPunkte} / ${maxGesamt}`} />
           <StatBox label="Ø Note" value={durchschnittNote} />
@@ -492,3 +458,13 @@ const smallBtnPrimary = {
   borderRadius: "6px", padding: "5px 12px", cursor: "pointer",
   fontSize: "0.8rem", fontWeight: "500",
 };
+
+function exportBtnStyle(disabled) {
+  return {
+    border: "1px solid #c8d8d2", background: "white",
+    padding: "8px 14px", borderRadius: "8px",
+    cursor: disabled ? "default" : "pointer",
+    fontSize: "0.82rem", fontWeight: "500",
+    color: disabled ? "#bbb" : "#2d5a4b",
+  };
+}
