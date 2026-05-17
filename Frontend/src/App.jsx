@@ -11,8 +11,14 @@ import ExportPage from "./pages/ExportPage";
 import ErgebnisPage from "./pages/ErgebnisPage";
 import PruefungAnlegenModal from "./components/PruefungAnlegenModal";
 import LokalPruefungAnlegenModal from "./components/LokalPruefungAnlegenModal";
+import LoginPage from "./pages/LoginPage";
+import BenutzerVerwaltungPage from "./pages/BenutzerVerwaltungPage";
+import { initialisiere, aktuellerBenutzer, logout } from "./auth";
+
+initialisiere();
 
 export default function App() {
+  const [user, setUser] = useState(aktuellerBenutzer());
   const [activePage, setActivePage] = useState("uebersicht");
   const [showNeuePruefung, setShowNeuePruefung] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
@@ -25,6 +31,14 @@ export default function App() {
   function handleErgebnis(result) {
     setErgebnis(result);
     setShowUpload(false);
+  }
+
+  function handleLogout() {
+    logout();
+    setUser(null);
+    setActivePage("uebersicht");
+    setErgebnis(null);
+    setSelectedPruefung(null);
   }
 
   function handleNavigate(page) {
@@ -91,6 +105,10 @@ export default function App() {
         return <NotenschluesselPage />;
       case "export":
         return <ExportPage />;
+      case "benutzer":
+        return user?.rolle === "admin"
+          ? <BenutzerVerwaltungPage aktuellerBenutzer={user} />
+          : null;
       default:
         return (
           <OverviewPage
@@ -103,11 +121,17 @@ export default function App() {
     }
   }
 
+  if (!user) {
+    return <LoginPage onLogin={setUser} />;
+  }
+
   return (
     <div style={{ display: "flex", minHeight: "100vh", width: "100%" }}>
       <Sidebar
         activePage={ergebnis || selectedPruefung ? null : activePage}
         onNavigate={handleNavigate}
+        user={user}
+        onLogout={handleLogout}
       />
       <main style={{ flex: 1, overflowY: "auto", backgroundColor: "#f0f2f0" }}>
         {renderPage()}
