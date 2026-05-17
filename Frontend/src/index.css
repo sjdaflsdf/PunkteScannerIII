@@ -1,0 +1,70 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  min-width: 0; /* verhindert Flex-Overflow */
+}
+
+html {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: #1a1a1a;
+  background: #f0f2f0;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  text-align: left;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  font-size: 14px;
+}
+
+input {
+  font-family: inherit;
+  font-size: 14px;
+}
+
+/* Mobile */
+@media (max-width: 640px) {
+  button {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  input, textarea, select {
+    font-size: 16px; /* verhindert Auto-Zoom auf iOS */
+  }
+
+  /* Alle Container dürfen nicht breiter als der Viewport sein */
+  div, section, article, main {
+    max-width: 100%;
+  }
+
+  /* Tabellen horizontal scrollbar halten */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+}

@@ -1,10 +1,20 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const multer = require("multer");
 const { pruefungAuswerten, DEFAULT_NOTENSCHLUESSEL } = require("./logik");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+// Hilfsfunktion: DB-Antwort parsen — auch bei leerem Body (z.B. 404 ohne JSON)
+async function parseDbResponse(response) {
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
 
 // Adresse vom Spring Boot Server (DB)
 const DB_URL = "https://punktescanneriii.onrender.com/api";
@@ -33,7 +43,7 @@ app.get("/api/health/db", async (_req, res) => {
 app.get("/api/pruefungen", async (req, res) => {
   try {
     const response = await fetch(`${DB_URL}/pruefungen`);
-    const data = await response.json();
+    const data = await parseDbResponse(response);
     res.json(data); // geht ans Frontend
   } catch (err) {
     res.status(500).json({ fehler: "DB nicht erreichbar." });
@@ -47,10 +57,15 @@ app.post("/api/pruefung/auswerten", async (req, res) => {
   const { aufgaben, notenschluessel, pruefungId, studentId } = req.body;
 
   // 1. Note berechnen mit deiner Logik
-  const ergebnis = pruefungAuswerten({
-    aufgaben,
-    notenschluessel: notenschluessel ?? DEFAULT_NOTENSCHLUESSEL
-  });
+  let ergebnis;
+  try {
+    ergebnis = pruefungAuswerten({
+      aufgaben,
+      notenschluessel: notenschluessel ?? DEFAULT_NOTENSCHLUESSEL
+    });
+  } catch (err) {
+    return res.status(400).json({ fehler: err.message });
+  }
 
   // 2. Ergebnis in DB speichern
   let dbGespeichert = false;
@@ -93,7 +108,7 @@ app.post("/api/pruefung/auswerten", async (req, res) => {
 app.get("/api/pruefungen/:id/ergebnisse", async (req, res) => {
   try {
     const response = await fetch(`${DB_URL}/ergebnisse/pruefung/${req.params.id}`);
-    const data = await response.json();
+    const data = await parseDbResponse(response);
     res.json(data);
   } catch (err) {
     res.status(500).json({ fehler: "DB nicht erreichbar." });
@@ -104,6 +119,81 @@ app.get("/api/pruefungen/:id/ergebnisse", async (req, res) => {
 // Notenschlüssel abrufen
 app.get("/api/notenschluessel", (req, res) => {
   res.json(DEFAULT_NOTENSCHLUESSEL);
+});
+
+// ─── ENDPUNKT 6 ───────────────────────────────────────────
+// Neue Prüfung anlegen
+app.post("/api/pruefungen", async (req, res) => {
+  try {
+    const response = await fetch(`${DB_URL}/pruefungen`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    const data = await parseDbResponse(response);
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ fehler: "DB nicht erreichbar." });
+  }
+});
+
+// ─── ENDPUNKT 7 ───────────────────────────────────────────
+// Prüfung anlegen (alias)
+app.post("/api/pruefungen/anlegen", async (req, res) => {
+  try {
+    const response = await fetch(`${DB_URL}/pruefungen`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    const data = await parseDbResponse(response);
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ fehler: "DB nicht erreichbar." });
+  }
+});
+
+// ─── ENDPUNKT 8 ───────────────────────────────────────────
+// Aufgaben einer Prüfung abrufen
+app.get("/api/pruefungen/:id/aufgaben", async (req, res) => {
+  try {
+    const response = await fetch(`${DB_URL}/pruefungen/${req.params.id}/aufgaben`);
+    const data = await parseDbResponse(response);
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ fehler: "DB nicht erreichbar." });
+  }
+});
+
+// ─── ENDPUNKT 9 ───────────────────────────────────────────
+// Student per Matrikelnummer suchen
+app.get("/api/studenten/matnr/:matNr", async (req, res) => {
+  try {
+    const response = await fetch(`${DB_URL}/studenten/matnr/${encodeURIComponent(req.params.matNr)}`);
+    if (response.status === 404) {
+      return res.status(404).json({ message: "Student nicht gefunden" });
+    }
+    const data = await parseDbResponse(response);
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ fehler: "DB nicht erreichbar." });
+  }
+});
+
+// ─── ENDPUNKT 10 ──────────────────────────────────────────
+// Student anlegen
+app.post("/api/studenten", async (req, res) => {
+  try {
+    const response = await fetch(`${DB_URL}/studenten`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    const data = await parseDbResponse(response);
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ fehler: "DB nicht erreichbar." });
+  }
 });
 
 // ─── ENDPUNKT 5 ───────────────────────────────────────────
@@ -160,4 +250,80 @@ app.post("/api/pruefungen/batch", async (req, res) => {
   res.json({ ergebnisse, fehler });
 });
 
-app.listen(3000, () => console.log("API läuft auf http://localhost:3000"));
+// ─── ENDPUNKT 11 ──────────────────────────────────────────
+// OCR: Klausurseiten scannen → Matrikelnummer + Punkte extrahieren
+app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ fehler: "Keine Dateien hochgeladen." });
+  }
+
+  try {
+    const { createWorker } = require("tesseract.js");
+
+    const workerText = await createWorker("deu");
+    const workerZahlen = await createWorker("deu");
+    await workerZahlen.setParameters({ tessedit_char_whitelist: "0123456789.," });
+
+    const alleTexte = [];
+    const alleZahlenTexte = [];
+    for (const datei of req.files) {
+      const { data: { text: t1 } } = await workerText.recognize(datei.buffer);
+      const { data: { text: t2 } } = await workerZahlen.recognize(datei.buffer);
+      alleTexte.push(t1);
+      alleZahlenTexte.push(t2);
+    }
+    await workerText.terminate();
+    await workerZahlen.terminate();
+
+    const gesamtText = alleTexte.join("\n");
+
+    let matrikelnummer = null;
+    const matrikelNachLabel = gesamtText.match(/(?:Matrikelnummer|Matrikel)[^\d]{0,20}(\d{7,8})/i);
+    if (matrikelNachLabel) {
+      matrikelnummer = matrikelNachLabel[1];
+    } else {
+      const fallback = gesamtText.match(/\b(\d{7,8})\b/);
+      if (fallback) matrikelnummer = fallback[1];
+    }
+
+    const aufgaben = [];
+    const tabelleStart = gesamtText.search(/Aufgabe[\s\S]{0,40}Max[\s\S]{0,40}Erreicht/i);
+    if (tabelleStart !== -1) {
+      const tabellenText = gesamtText.slice(tabelleStart);
+      const zeilenRegex = /^\s*(\d+)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s*$/gm;
+      let m;
+      while ((m = zeilenRegex.exec(tabellenText)) !== null) {
+        const nr = parseInt(m[1]);
+        const maxP = parseFloat(m[2].replace(",", "."));
+        const erreicht = parseFloat(m[3].replace(",", "."));
+        aufgaben.push({
+          aufgabeNr: nr,
+          bezeichnung: `Aufgabe ${nr}`,
+          erreichterPunkte: isNaN(erreicht) ? null : erreicht,
+          maxPunkte: isNaN(maxP) ? null : maxP,
+        });
+      }
+    }
+
+    if (aufgaben.length === 0) {
+      const erreichtRegex = /(?:Erreicht|ERREICHT)\s*\n\s*(\d+(?:[.,]\d+)?)/g;
+      let m;
+      let nr = 1;
+      while ((m = erreichtRegex.exec(gesamtText)) !== null) {
+        aufgaben.push({
+          aufgabeNr: nr++,
+          bezeichnung: `Aufgabe ${nr - 1}`,
+          erreichterPunkte: parseFloat(m[1].replace(",", ".")),
+          maxPunkte: null,
+        });
+      }
+    }
+
+    res.json({ matrikelnummer, aufgaben });
+  } catch (err) {
+    res.status(500).json({ fehler: "OCR-Fehler: " + err.message });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`API läuft auf Port ${PORT}`));

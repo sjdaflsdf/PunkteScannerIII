@@ -1,6 +1,16 @@
 node_modules/
 **/node_modules/
 dist/
+**/dist/
 build/
 .DS_Store
+**/.DS_Store
 *.log
+.env
+# macOS Finder-Duplikate
+* 2
+* 2.*
+* 3
+* 3.*
+# IntelliJ
+.idea/

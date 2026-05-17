@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST http://localhost:3000/api/ocr/scan -F pruefungId=30 -F 'dateien=@/System/Library/Desktop Pictures/Solid Colors/Black.png')",
+      "Bash(curl -s \"https://generativelanguage.googleapis.com/v1beta/models?key=AIzaSyBVITmvLWy1QbbLim_Ell18FsievyWrges\")",
+      "Bash(GEMINI_API_KEY=AIzaSyAcNb8jUBdKzmpwTEbxmwtOlXqf7beGB0o node server.js)",
+      "Bash(rsync -a --exclude=node_modules --exclude=.git --exclude=Frontend --exclude=backend '~/Desktop/punktescanner-iii/Frontend/Frontend/' '~/Desktop/punktescanner-iii/frontend/')",
+      "Bash(echo \"done: $?\")",
+      "Bash(# Aktuellen API-Key aus Frontend/backend/.env in backend/.env übertragen *)",
+      "Bash(rm -rf ~/Desktop/punktescanner-iii/frontend/Frontend \\\\ *)",
+      "Bash(node --env-file=.env server.js)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(curl -s http://localhost:3000/)",
+      "Bash(curl -s -X POST http://localhost:3000/api/upload -w \"\\\\nHTTP Status: %{http_code}\")",
+      "Bash(curl -s -w \"\\\\nHTTP: %{http_code}\" https://punktescanneriii.onrender.com/api/pruefungen)",
+      "Bash(node /Users/felixkarges/Desktop/punktescanner-iii/server.js)",
+      "Read(//tmp/**)",
+      "Bash(cat /tmp/server_log.txt *)",
+      "Read(//private/tmp/**)",
+      "Bash(curl -v http://localhost:3000/api/health)",
+      "Bash(node -e \"require\\('./logik'\\)\")",
+      "Bash(pkill -f \"node server\")",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(curl -s -w '\\\\nHTTP: %{http_code}\\\\n' https://punktescanneriii.onrender.com/api/pruefungen)",
+      "Bash(curl -s -w \"\\\\nHTTP: %{http_code}\\\\n\" \"https://punktescanneriii.onrender.com/api/ergebnisse/pruefung/31\")",
+      "Bash(curl -s -w '\\\\nHTTP: %{http_code}\\\\n' -X POST https://punktescanneriii.onrender.com/api/ergebnisse -H 'Content-Type: application/json' -d '{\"pruefung\":{\"id\":31},\"student\":{\"id\":12},\"gesamtPunkte\":75,\"note\":2.0}')",
+      "Bash(curl -s -w '\\\\nHTTP: %{http_code}\\\\n' -X POST https://punktescanneriii.onrender.com/api/pruefungen/anlegen -H 'Content-Type: application/json' -d '{\"name\":\"testtest\",\"maxPunkte\":90}')"
+    ],
+    "additionalDirectories": [
+      "/Users/felixkarges/Desktop/punktescanner-iii/backend",
+      "/Users/felixkarges/Desktop/punktescanner-iii/Frontend/Frontend"
+    ]
+  }
+}
