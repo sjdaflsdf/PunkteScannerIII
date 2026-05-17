@@ -50,12 +50,12 @@ export default function MobileNavBar({ activePage, onNavigate, user }) {
 
   return (
     <nav style={{
-      position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100,
-      height: "64px",
+      flexShrink: 0,
+      height: "calc(64px + env(safe-area-inset-bottom))",
+      paddingBottom: "env(safe-area-inset-bottom)",
       backgroundColor: "white",
       borderTop: "1px solid #e8e8e8",
       display: "flex", alignItems: "stretch",
-      paddingBottom: "env(safe-area-inset-bottom)",
       boxShadow: "0 -2px 12px rgba(0,0,0,0.07)",
     }}>
       {items.map(({ id, label, Icon }) => {

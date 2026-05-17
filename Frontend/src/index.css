@@ -1,5 +1,10 @@
 *, *::before, *::after {
   box-sizing: border-box;
+  min-width: 0; /* verhindert Flex-Overflow */
+}
+
+html {
+  overflow-x: hidden;
 }
 
 body {
@@ -9,6 +14,7 @@ body {
   color: #1a1a1a;
   background: #f0f2f0;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 #root {
@@ -38,7 +44,7 @@ input {
   font-size: 14px;
 }
 
-/* Mobile touch improvements */
+/* Mobile */
 @media (max-width: 640px) {
   button {
     -webkit-tap-highlight-color: transparent;
@@ -46,17 +52,19 @@ input {
   }
 
   input, textarea, select {
-    font-size: 16px; /* Verhindert Auto-Zoom auf iOS */
+    font-size: 16px; /* verhindert Auto-Zoom auf iOS */
   }
 
-  /* Scrollbare Tabellen auf Mobile */
-  .table-scroll {
+  /* Alle Container dürfen nicht breiter als der Viewport sein */
+  div, section, article, main {
+    max-width: 100%;
+  }
+
+  /* Tabellen horizontal scrollbar halten */
+  table {
+    display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    width: 100%;
   }
-}
-
-/* iPhone Notch / Home-Bar */
-body {
-  padding-bottom: env(safe-area-inset-bottom);
 }

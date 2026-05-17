@@ -157,9 +157,19 @@ export default function App() {
 
   if (isMobile) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "#f0f2f0" }}>
+      <div style={{
+        display: "flex", flexDirection: "column",
+        height: "100vh", height: "100dvh",
+        overflow: "hidden",
+        backgroundColor: "#f0f2f0",
+      }}>
         <MobileHeader user={user} onLogout={handleLogout} />
-        <main style={{ flex: 1, overflowY: "auto", paddingTop: "56px", paddingBottom: "72px" }}>
+        <main style={{
+          flex: 1,
+          overflowY: "auto",
+          overflowX: "hidden",
+          WebkitOverflowScrolling: "touch",
+        }}>
           {renderPage()}
         </main>
         <MobileNavBar

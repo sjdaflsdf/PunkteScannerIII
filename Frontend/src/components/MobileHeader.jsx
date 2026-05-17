@@ -6,12 +6,13 @@ export default function MobileHeader({ user, onLogout, title }) {
   return (
     <>
       <header style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        flexShrink: 0,
         height: "56px",
         backgroundColor: "#2d5a4b",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "0 16px",
         boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
+        zIndex: 10,
       }}>
         <span style={{ color: "white", fontWeight: "700", fontSize: "1rem", letterSpacing: "-0.2px" }}>
           PunkteScanner
