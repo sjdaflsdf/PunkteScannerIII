@@ -14,3 +14,7 @@ build/
 * 3.*
 # IntelliJ
 .idea/
+# Claude Code
+.claude/
+# ONNX-Modell (nicht mehr genutzt)
+*.onnx

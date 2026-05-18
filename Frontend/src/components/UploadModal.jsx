@@ -17,6 +17,8 @@ export default function UploadModal({ onClose, onErgebnis }) {
   const [studentId, setStudentId] = useState(null);
   const [studentDialog, setStudentDialog] = useState(null); // { matNr, name }
   const [studentName, setStudentName] = useState("");
+  const [pruefungAufgaben, setPruefungAufgaben] = useState([]); // Aufgaben der gewählten Prüfung (inkl. maxPunkte)
+  const [saveFehler, setSaveFehler] = useState(null);
 
   const fileInputRef = useRef(null);
   const kameraInputRef = useRef(null);
@@ -30,6 +32,13 @@ export default function UploadModal({ onClose, onErgebnis }) {
       .catch((e) => setFehler(e.message))
       .finally(() => setLoadingPruefungen(false));
   }, []);
+
+  useEffect(() => {
+    if (!selectedPruefungId) return;
+    api.getAufgaben(selectedPruefungId)
+      .then(setPruefungAufgaben)
+      .catch(() => setPruefungAufgaben([]));
+  }, [selectedPruefungId]);
 
   function dateienHinzufuegen(files) {
     const neu = Array.from(files)
@@ -133,11 +142,20 @@ export default function UploadModal({ onClose, onErgebnis }) {
   }
 
   async function speichernUndAbschliessen(resolvedStudentId) {
-    const aufgaben = ocrErgebnis.aufgaben.map((aufgabe, i) => ({
-      name: aufgabe.bezeichnung,
-      punkte: Number(erreichterPunkte[i]),
-      maxPunkte: aufgabe.maxPunkte,
-    }));
+    const aufgaben = ocrErgebnis.aufgaben.map((aufgabe, i) => {
+      const dbAufgabe = pruefungAufgaben.find(a => a.aufgabeNr === aufgabe.aufgabeNr) ?? pruefungAufgaben[i];
+      return {
+        name: aufgabe.bezeichnung,
+        punkte: Number(erreichterPunkte[i]),
+        maxPunkte: dbAufgabe?.maxPunkte ?? 0,
+      };
+    }).filter(a => a.maxPunkte > 0);
+
+    if (aufgaben.length === 0) {
+      setSaveFehler("Keine Aufgaben mit gültigen Maximalpunkten gefunden. Bitte Prüfung auswählen und erneut versuchen.");
+      return;
+    }
+
     const result = await api.auswerten({
       pruefungId: selectedPruefungId,
       studentId: resolvedStudentId ?? studentId,

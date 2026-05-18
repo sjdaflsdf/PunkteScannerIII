@@ -135,20 +135,14 @@ export default function PruefungAnlegenModal({ onClose, onAngelegt }) {
     <div class="apkt">
       <div class="plabel">Max. Punkte</div>
       <div class="pzahl">${a.maxPunkte}</div>
-      <div class="plabel erreicht">Erreicht</div>
-      <div class="ocr"></div>
+      <div class="plabel erreicht">A${i + 1} ERREICHT</div>
+      <div class="ocr"><div class="ocrdigit"></div><div class="ocrdigit"></div></div>
     </div>
   </div>
   <div class="bereich" style="height:${hoehe}px;${raumBg}"></div>
 </div>`;
     }).join("\n");
 
-    const sumRows = aufgaben.map((a, i) => `
-<tr>
-  <td class="stdc">${i + 1}</td>
-  <td class="stdc">${a.maxPunkte}</td>
-  <td class="stde"><div class="ocrk"></div></td>
-</tr>`).join("");
 
     const html = `<!DOCTYPE html>
 <html lang="de"><head>
@@ -181,19 +175,12 @@ thead.rh td{padding-bottom:10px;border-bottom:2pt solid #2d5a4b}
 .atext{flex:1;padding:9px 12px;font-size:10pt;line-height:1.5;word-wrap:break-word}
 .apkt{border-left:1.5px solid #c8d8d2;width:96px;flex-shrink:0;padding:6px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .plabel{font-size:6pt;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;text-align:center;line-height:1.3}
-.erreicht{margin-top:4px}
+.erreicht{margin-top:4px;font-size:7pt;font-weight:900;color:#000;letter-spacing:.06em}
 .pzahl{font-size:13pt;font-weight:700;color:#2d5a4b}
-.ocr{width:64px;height:30px;border:2px solid #2d5a4b;border-radius:4px;background:#fafff9;margin-top:2px}
+.ocr{display:flex;gap:5px;margin-top:3px;justify-content:center}
+.ocrdigit{width:38px;height:50px;border:2.5px solid #000;border-radius:3px;background:#fff}
 .bereich{border:1.5px solid #c8d8d2;border-top:none;border-radius:0 0 4px 4px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
-/* ── Summentabelle ── */
-.sumwrap{break-inside:avoid;page-break-inside:avoid;display:flex;justify-content:flex-end;padding-top:12px}
-table.sum{border-collapse:collapse;min-width:230px}
-table.sum th{padding:6px 10px;font-size:7.5pt;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:.04em;color:#555;border:1px solid #ddd;background:#f0f4f2}
-.stdc{padding:5px 10px;font-size:9pt;border:1px solid #e8e8e8;vertical-align:middle;text-align:center}
-.stde{padding:4px 8px;border:1px solid #e8e8e8;vertical-align:middle;min-width:80px}
-.ocrk{height:26px;border:1.5px solid #888;border-radius:3px;background:#fafff9}
-.sumges td{background:#f0f4f2;font-weight:700}
 .hinweis{margin-top:10px;font-size:7pt;color:#bbb;text-align:center}
 </style>
 </head><body>
@@ -220,19 +207,6 @@ table.sum th{padding:6px 10px;font-size:7.5pt;font-weight:700;text-align:center;
 </td></tr>
 <tr><td>${aufgabenHTML}</td></tr>
 <tr><td>
-  <div class="sumwrap">
-    <table class="sum">
-      <thead><tr><th>Aufgabe</th><th>Max. Pkt.</th><th>Erreicht</th></tr></thead>
-      <tbody>
-        ${sumRows}
-        <tr class="sumges">
-          <td class="stdc" style="text-align:right">Gesamt</td>
-          <td class="stdc">${gesamtMax}</td>
-          <td class="stde"><div class="ocrk" style="border-color:#2d5a4b;border-width:2px"></div></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
   <p class="hinweis">Punkte deutlich in die Felder eintragen · wird per Scan ausgewertet</p>
 </td></tr>
 </tbody>
@@ -512,7 +486,10 @@ table.sum th{padding:6px 10px;font-size:7.5pt;font-weight:700;text-align:center;
                             <span style={{ fontSize: "0.68rem", color: "#888", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.04em" }}>Max. Punkte</span>
                             <span style={{ fontSize: "1rem", fontWeight: "700", color: "#2d5a4b" }}>{aufgabe.maxPunkte}</span>
                             <span style={{ fontSize: "0.68rem", color: "#888", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: "4px" }}>Erreicht</span>
-                            <div style={{ width: "72px", height: "34px", border: "2px solid #2d5a4b", borderRadius: "4px", backgroundColor: "#fafff9" }} />
+                            <div style={{ display: "flex", gap: "4px" }}>
+                              <div style={{ width: "30px", height: "38px", border: "2px solid #000", borderRadius: "3px", backgroundColor: "#fff" }} />
+                              <div style={{ width: "30px", height: "38px", border: "2px solid #000", borderRadius: "3px", backgroundColor: "#fff" }} />
+                            </div>
                           </div>
                         </div>
                         {/* Bearbeitungsraum */}
@@ -521,36 +498,8 @@ table.sum th{padding:6px 10px;font-size:7.5pt;font-weight:700;text-align:center;
                     </tr>
                   ))}
 
-                  {/* Summentabelle */}
-                  <tr style={{ pageBreakInside: "avoid", breakInside: "avoid" }}>
-                    <td style={{ paddingTop: "6px" }}>
-                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                        <table style={{ borderCollapse: "collapse", minWidth: "260px" }}>
-                          <thead>
-                            <tr style={{ backgroundColor: "#f0f4f2" }}>
-                              <th style={thStyle}>Aufgabe</th>
-                              <th style={thStyle}>Max. Pkt.</th>
-                              <th style={{ ...thStyle, width: "90px" }}>Erreicht</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {aufgaben.map((a, i) => (
-                              <tr key={i}>
-                                <td style={{ ...tdStyle, textAlign: "center" }}>{i + 1}</td>
-                                <td style={{ ...tdStyle, textAlign: "center" }}>{a.maxPunkte}</td>
-                                <td style={{ padding: "5px 8px" }}><div style={ocrFeldKleinStyle} /></td>
-                              </tr>
-                            ))}
-                            <tr style={{ backgroundColor: "#f0f4f2", fontWeight: "700" }}>
-                              <td style={{ ...tdStyle, textAlign: "right" }}>Gesamt</td>
-                              <td style={{ ...tdStyle, textAlign: "center" }}>{gesamtMax}</td>
-                              <td style={{ padding: "5px 8px" }}>
-                                <div style={{ ...ocrFeldKleinStyle, borderColor: "#2d5a4b", borderWidth: "2px" }} />
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
+                  <tr>
+                    <td>
                       <p style={{ marginTop: "12px", fontSize: "0.7rem", color: "#bbb", textAlign: "center" }}>
                         Punkte deutlich in die Felder eintragen · wird per Scan ausgewertet
                       </p>

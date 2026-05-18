@@ -2,6 +2,8 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
+const { spawn } = require("child_process");
+const path = require("path");
 const { pruefungAuswerten, DEFAULT_NOTENSCHLUESSEL } = require("./logik");
 
 const app = express();
@@ -9,6 +11,27 @@ app.use(cors());
 app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+// ─── EasyOCR Python-Server ────────────────────────────────
+let ocrBereit = false;
+const ocrProc = spawn("python3", [path.join(__dirname, "ocr_server.py")]);
+ocrProc.stdout.on("data", d => {
+  const msg = d.toString();
+  process.stdout.write("[OCR] " + msg);
+  if (msg.includes("bereit")) ocrBereit = true;
+});
+ocrProc.stderr.on("data", d => process.stderr.write("[OCR] " + d.toString()));
+ocrProc.on("exit", code => console.log(`[OCR] Python-Prozess beendet (${code})`));
+process.on("exit", () => ocrProc.kill());
+
+async function easyOcr(pfade) {
+  const resp = await fetch("http://127.0.0.1:3001", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pfade),
+  });
+  return resp.json();
+}
 
 // Hilfsfunktion: DB-Antwort parsen — auch bei leerem Body (z.B. 404 ohne JSON)
 async function parseDbResponse(response) {
@@ -138,16 +161,45 @@ app.post("/api/pruefungen", async (req, res) => {
 });
 
 // ─── ENDPUNKT 7 ───────────────────────────────────────────
-// Prüfung anlegen (alias)
+// Prüfung anlegen: erst Prüfung, dann Aufgaben einzeln
 app.post("/api/pruefungen/anlegen", async (req, res) => {
+  const { aufgaben = [], ...pruefungDaten } = req.body;
+
   try {
-    const response = await fetch(`${DB_URL}/pruefungen`, {
+    // 1. Prüfung anlegen (ohne aufgaben, mit berechneten Gesamtpunkten)
+    const gesamtMax = aufgaben.reduce((s, a) => s + (Number(a.maxPunkte) || 0), 0);
+    const pruefungRes = await fetch(`${DB_URL}/pruefungen`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify({ ...pruefungDaten, maxPunkte: gesamtMax }),
     });
-    const data = await parseDbResponse(response);
-    res.status(response.status).json(data);
+
+    if (!pruefungRes.ok) {
+      const err = await pruefungRes.text();
+      return res.status(pruefungRes.status).json({ fehler: err });
+    }
+
+    const pruefung = await parseDbResponse(pruefungRes);
+
+    // 2. Aufgaben einzeln anlegen
+    const angelegteAufgaben = [];
+    for (const [i, a] of aufgaben.entries()) {
+      const aufgabeRes = await fetch(`${DB_URL}/aufgaben`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pruefung: { id: pruefung.id },
+          aufgabeNr: i + 1,
+          maxPunkte: Number(a.maxPunkte),
+          bezeichnung: a.bezeichnung,
+        }),
+      });
+      if (aufgabeRes.ok) {
+        angelegteAufgaben.push(await parseDbResponse(aufgabeRes));
+      }
+    }
+
+    res.status(201).json({ pruefung, aufgaben: angelegteAufgaben });
   } catch (err) {
     res.status(500).json({ fehler: "DB nicht erreichbar." });
   }
@@ -258,67 +310,176 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
   }
 
   try {
+    const Jimp = require("jimp");
     const { createWorker } = require("tesseract.js");
 
-    const workerText = await createWorker("deu");
-    const workerZahlen = await createWorker("deu");
-    await workerZahlen.setParameters({ tessedit_char_whitelist: "0123456789.," });
+    const langPath = __dirname;
 
-    const alleTexte = [];
-    const alleZahlenTexte = [];
-    for (const datei of req.files) {
-      const { data: { text: t1 } } = await workerText.recognize(datei.buffer);
-      const { data: { text: t2 } } = await workerZahlen.recognize(datei.buffer);
-      alleTexte.push(t1);
-      alleZahlenTexte.push(t2);
+    // Tesseract für Anker-Erkennung + Matrikelnummer
+    const workerVoll    = await createWorker("deu", 1, { langPath, cachePath: langPath });
+    const workerZiffern = await createWorker("eng", 1, { langPath, cachePath: langPath });
+    await workerZiffern.setParameters({ tessedit_pageseg_mode: "7" });
+
+    async function zuBuffer(jimpBild) {
+      return jimpBild.getBufferAsync(Jimp.MIME_PNG);
     }
-    await workerText.terminate();
-    await workerZahlen.terminate();
-
-    const gesamtText = alleTexte.join("\n");
 
     let matrikelnummer = null;
-    const matrikelNachLabel = gesamtText.match(/(?:Matrikelnummer|Matrikel)[^\d]{0,20}(\d{7,8})/i);
-    if (matrikelNachLabel) {
-      matrikelnummer = matrikelNachLabel[1];
-    } else {
-      const fallback = gesamtText.match(/\b(\d{7,8})\b/);
-      if (fallback) matrikelnummer = fallback[1];
-    }
-
     const aufgaben = [];
-    const tabelleStart = gesamtText.search(/Aufgabe[\s\S]{0,40}Max[\s\S]{0,40}Erreicht/i);
-    if (tabelleStart !== -1) {
-      const tabellenText = gesamtText.slice(tabelleStart);
-      const zeilenRegex = /^\s*(\d+)\s+(\d+(?:[.,]\d+)?)\s+(\d+(?:[.,]\d+)?)\s*$/gm;
-      let m;
-      while ((m = zeilenRegex.exec(tabellenText)) !== null) {
-        const nr = parseInt(m[1]);
-        const maxP = parseFloat(m[2].replace(",", "."));
-        const erreicht = parseFloat(m[3].replace(",", "."));
+
+    for (const datei of req.files) {
+      const original = await Jimp.read(datei.buffer);
+      const { width, height } = original.bitmap;
+      console.log(`Bildgröße: ${width}x${height}`);
+
+      // Vorverarbeitung für Anker-Erkennung: Graustufen + Kontrast
+      const fuerAnker = original.clone()
+        .greyscale()
+        .normalize()
+        .contrast(0.3);
+
+      // Vorverarbeitung für Crops: Graustufen + stärkerer Kontrast
+      const fuerCrops = original.clone()
+        .greyscale()
+        .normalize()
+        .contrast(0.5);
+
+      // Vollseiten-OCR mit Bounding-Boxes
+      const { data } = await workerVoll.recognize(await zuBuffer(fuerAnker));
+
+      // Wörter aus hierarchischer Struktur extrahieren
+      const alleWoerter = (data.blocks ?? []).flatMap(b =>
+        (b.paragraphs ?? []).flatMap(p =>
+          (p.lines ?? []).flatMap(l => l.words ?? [])
+        )
+      );
+      const woerter = (alleWoerter.length ? alleWoerter : data.words ?? [])
+        .filter(w => w.bbox);
+
+      // Zeilenebene als Fallback für Anker mit Bounding Boxes
+      const zeilen = (data.blocks ?? []).flatMap(b =>
+        (b.paragraphs ?? []).flatMap(p => p.lines ?? [])
+      ).filter(l => l.bbox);
+
+      console.log(`=== Seite: ${woerter.length} Wörter, ${zeilen.length} Zeilen ===`);
+      woerter.filter(w => w.confidence > 40).forEach(w =>
+        console.log(`"${w.text}" conf=${Math.round(w.confidence)} bbox=${JSON.stringify(w.bbox)}`)
+      );
+
+      // ── Matrikelnummer ──
+      if (!matrikelnummer) {
+        const matrikelAnker =
+          woerter.find(w => /matrikel/i.test(w.text)) ??
+          zeilen.find(l => /matrikel/i.test(l.text));
+        if (matrikelAnker) {
+          const { x0, y0, x1, y1 } = matrikelAnker.bbox;
+          // Student schreibt rechts neben "Matrikel:" auf die Linie → rechts croppen
+          const cropLeft   = Math.min(x1 + 4, width - 10);
+          const cropTop    = Math.max(0, y0 - 4);
+          const cropWidth  = Math.min(260, width - cropLeft);
+          const cropHeight = Math.min(y1 - y0 + 14, height - cropTop);
+
+          const matrikelCrop = fuerCrops.clone()
+            .crop(cropLeft, cropTop, cropWidth, cropHeight)
+            .scale(4)
+            .threshold({ max: 140 });
+          matrikelCrop.write("/tmp/crop_matrikel.png");
+
+          const { data: md } = await workerZiffern.recognize(await zuBuffer(matrikelCrop));
+          const normMd = md.text
+            .replace(/[OoQDd]/g, "0").replace(/[IiLl]/g, "1")
+            .replace(/[Ss]/g, "5").replace(/[Bb]/g, "8")
+            .replace(/[Zz]/g, "2").replace(/[Gg]/g, "9");
+          const ziffern = normMd.replace(/[^0-9]/g, "");
+          if (ziffern.length >= 7) matrikelnummer = ziffern.slice(0, 8);
+        }
+
+        // Fallback: erste 7-8-stellige Zahl im Volltext (mit OCR-Zeichenkorrektur)
+        if (!matrikelnummer) {
+          const normVoll = (data.text ?? "")
+            .replace(/S/g, "5").replace(/s/g, "5")
+            .replace(/O/g, "0").replace(/o/g, "0")
+            .replace(/I/g, "1").replace(/l/g, "1")
+            .replace(/Z/g, "2").replace(/B/g, "8");
+          const fb = normVoll.match(/\b(\d{7,8})\b/);
+          if (fb) matrikelnummer = fb[1];
+        }
+      }
+
+      // ── Punkte aus den Aufgaben-Feldern ──
+      // Suche "A{n} ERREICHT" Zeilen — Aufgabennummer steht direkt davor
+      const erreichtZeilen = zeilen
+        .filter(l => /ERREICHT/i.test(l.text))
+        .sort((a, b) => a.bbox.y0 - b.bbox.y0);
+
+      // Fallback: einzelne ERREICHT-Wörter ohne Nummer
+      const erreichtWoerter = woerter
+        .filter(w => /^ERREICHT[:]?$/i.test(w.text))
+        .sort((a, b) => a.bbox.y0 - b.bbox.y0);
+
+      const erreichtLabels = erreichtZeilen.length ? erreichtZeilen : erreichtWoerter;
+      console.log(`ERREICHT-Anker: ${erreichtLabels.length} (${erreichtZeilen.length} Zeilen, ${erreichtWoerter.length} Wörter)`);
+
+      for (const label of erreichtLabels) {
+        // Aufgabennummer aus "A3 ERREICHT" extrahieren (5/S und 2/Z Verwechslungen korrigieren)
+        const normText = (label.text ?? "").replace(/S/g, "5").replace(/Z/g, "2").replace(/O/g, "0").replace(/I/g, "1").replace(/l/g, "1");
+        const numMatch = normText.match(/A(\d+)\s*ERREICHT/i);
+        const aufgabeNr = numMatch ? parseInt(numMatch[1]) : (aufgaben.length + 1);
+        console.log(`  → Aufgabe ${aufgabeNr} erkannt aus: "${label.text}"`);
+
+        const feldLeft   = Math.max(0, label.bbox.x0 - 5);
+        const feldTop    = Math.min(height - 1, label.bbox.y1 + 6);
+        const feldWidth  = Math.min(200, width - feldLeft);
+        const feldHeight = Math.min(100, height - feldTop);
+
+        console.log(`  Aufgabe ${aufgabeNr}: crop L=${feldLeft} T=${feldTop} W=${feldWidth} H=${feldHeight}`);
+
+        if (feldWidth <= 0 || feldHeight <= 0) continue;
+
+        // Zwei Ziffernboxen per EasyOCR erkennen
+        const labelMitte = Math.round((label.bbox.x0 + label.bbox.x1) / 2);
+        const BOX_W = 69;
+        const GAP_W = 9;
+        const ocrLinks = Math.max(0, labelMitte - BOX_W - Math.round(GAP_W / 2));
+        const boxHoehe = Math.min(100, height - feldTop);
+
+        const b1Pfad = `/tmp/crop_A${aufgabeNr}_b1.png`;
+        const b2Pfad = `/tmp/crop_A${aufgabeNr}_b2.png`;
+        // 5px Rand-Inset um den Kastenrahmen rauszuschneiden, dann 3x hochskalieren + Schwellwert
+        const INSET = 5;
+        const innerW = Math.max(10, BOX_W - INSET * 2);
+        const innerH = Math.max(10, boxHoehe - INSET * 2);
+        fuerCrops.clone().crop(ocrLinks + INSET, feldTop + INSET, innerW, innerH)
+          .scale(3).threshold({ max: 140 }).write(b1Pfad);
+        fuerCrops.clone().crop(ocrLinks + BOX_W + GAP_W + INSET, feldTop + INSET, innerW, innerH)
+          .scale(3).threshold({ max: 140 }).write(b2Pfad);
+
+        const ocrRes = await easyOcr({ b1: b1Pfad, b2: b2Pfad });
+        const d1 = ocrRes.b1?.d ?? "";
+        const d2 = ocrRes.b2?.d ?? "";
+        console.log(`  A${aufgabeNr}: box1="${d1}"(${ocrRes.b1?.c}) box2="${d2}"(${ocrRes.b2?.c})`);
+
+        const roh = (d1 + d2).replace(/[^0-9]/g, "");
+        const punkte = parseFloat(roh);
+
+        // Duplikate überspringen — gleiche aufgabeNr bereits vorhanden
+        if (aufgaben.some(a => a.aufgabeNr === aufgabeNr)) {
+          console.log(`  Aufgabe ${aufgabeNr} übersprungen (Duplikat)`);
+          continue;
+        }
+
         aufgaben.push({
-          aufgabeNr: nr,
-          bezeichnung: `Aufgabe ${nr}`,
-          erreichterPunkte: isNaN(erreicht) ? null : erreicht,
-          maxPunkte: isNaN(maxP) ? null : maxP,
+          aufgabeNr,
+          bezeichnung: `Aufgabe ${aufgabeNr}`,
+          erreichterPunkte: isNaN(punkte) ? null : Math.round(punkte * 10) / 10,
         });
       }
     }
 
-    if (aufgaben.length === 0) {
-      const erreichtRegex = /(?:Erreicht|ERREICHT)\s*\n\s*(\d+(?:[.,]\d+)?)/g;
-      let m;
-      let nr = 1;
-      while ((m = erreichtRegex.exec(gesamtText)) !== null) {
-        aufgaben.push({
-          aufgabeNr: nr++,
-          bezeichnung: `Aufgabe ${nr - 1}`,
-          erreichterPunkte: parseFloat(m[1].replace(",", ".")),
-          maxPunkte: null,
-        });
-      }
-    }
+    await workerVoll.terminate();
+    await workerZiffern.terminate();
 
+    aufgaben.sort((a, b) => a.aufgabeNr - b.aufgabeNr);
     res.json({ matrikelnummer, aufgaben });
   } catch (err) {
     res.status(500).json({ fehler: "OCR-Fehler: " + err.message });
