@@ -2,11 +2,36 @@ import { useState } from "react";
 
 const LEERE_AUFGABE = { bezeichnung: "", maxPunkte: "" };
 
+const NOTEN_TEMPLATE = [
+  { note: "1,0", color: "#4CAF50" },
+  { note: "1,3", color: "#4CAF50" },
+  { note: "1,7", color: "#66BB6A" },
+  { note: "2,0", color: "#8BC34A" },
+  { note: "2,3", color: "#8BC34A" },
+  { note: "2,7", color: "#AED581" },
+  { note: "3,0", color: "#FF9800" },
+  { note: "3,3", color: "#FF9800" },
+  { note: "3,7", color: "#FFA726" },
+  { note: "4,0", color: "#F44336" },
+];
+
+function berechneNotenschluessel(bestandenAb) {
+  const rangePerGrade = (100 - bestandenAb) / NOTEN_TEMPLATE.length;
+  const schluessel = NOTEN_TEMPLATE.map((n, i) => ({
+    ...n,
+    schwelle: Math.round(bestandenAb + (NOTEN_TEMPLATE.length - 1 - i) * rangePerGrade),
+  }));
+  schluessel.push({ note: "5,0", schwelle: 0, color: "#B71C1C" });
+  return schluessel;
+}
+
 export default function LokalPruefungAnlegenModal({ onClose, onAngelegt }) {
   const [klausurName, setKlausurName] = useState("");
   const [datum, setDatum] = useState("");
   const [aufgaben, setAufgaben] = useState([{ ...LEERE_AUFGABE }]);
   const [fehler, setFehler] = useState(null);
+  const [istStandardNotenschluessel, setIstStandardNotenschluessel] = useState(true);
+  const [bestandenAb, setBestandenAb] = useState(50);
 
   function aufgabeAendern(index, feld, wert) {
     setAufgaben((prev) => prev.map((a, i) => (i === index ? { ...a, [feld]: wert } : a)));
@@ -52,6 +77,8 @@ export default function LokalPruefungAnlegenModal({ onClose, onAngelegt }) {
         maxPunkte: Number(a.maxPunkte),
       })),
       ergebnisse: [],
+      istStandardNotenschluessel,
+      notenschluessel: istStandardNotenschluessel ? null : berechneNotenschluessel(bestandenAb),
     };
 
     const vorhandene = JSON.parse(localStorage.getItem("pruefungen_lokal") || "[]");
@@ -97,6 +124,54 @@ export default function LokalPruefungAnlegenModal({ onClose, onAngelegt }) {
               onChange={(e) => setDatum(e.target.value)}
               style={inputStyle}
             />
+          </div>
+
+          {/* Notenschlüssel */}
+          <div style={{ marginBottom: "20px" }}>
+            <label style={labelStyle}>Notenschlüssel</label>
+            <div style={{ display: "flex", gap: "20px", marginBottom: "10px" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "7px", cursor: "pointer", fontSize: "0.875rem", color: "#333" }}>
+                <input
+                  type="radio"
+                  name="notenschluessel-typ-lokal"
+                  checked={istStandardNotenschluessel}
+                  onChange={() => setIstStandardNotenschluessel(true)}
+                />
+                Standard
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "7px", cursor: "pointer", fontSize: "0.875rem", color: "#333" }}>
+                <input
+                  type="radio"
+                  name="notenschluessel-typ-lokal"
+                  checked={!istStandardNotenschluessel}
+                  onChange={() => setIstStandardNotenschluessel(false)}
+                />
+                Andere
+              </label>
+            </div>
+            {istStandardNotenschluessel ? (
+              <p style={{ fontSize: "0.78rem", color: "#999", margin: 0 }}>
+                1,0 ab 95% · 4,0 ab 50% · 5,0 unter 50%
+              </p>
+            ) : (
+              <div style={{ border: "1px solid #e0e0e0", borderRadius: "8px", padding: "12px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <span style={{ fontSize: "0.875rem", color: "#555" }}>Note 4,0 (bestanden) ab</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    value={bestandenAb}
+                    onChange={(e) => setBestandenAb(Number(e.target.value))}
+                    style={{ ...inputStyle, width: "68px", textAlign: "center", padding: "6px 8px" }}
+                  />
+                  <span style={{ fontSize: "0.875rem", color: "#555" }}>%</span>
+                </div>
+                <p style={{ fontSize: "0.75rem", color: "#999", margin: "8px 0 0" }}>
+                  Die anderen Noten werden gleichmäßig verteilt · 1,0 ab {berechneNotenschluessel(bestandenAb)[0].schwelle}%
+                </p>
+              </div>
+            )}
           </div>
 
           <div style={{ marginBottom: "8px" }}>
