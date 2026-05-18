@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api";
 
-export default function NotenschluesselEditor({ pruefungName = "Datenbanken II" }) {
+export default function NotenschluesselEditor({ pruefungName = null }) {
   const [schluessel, setSchluessel] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fehler, setFehler] = useState(null);
@@ -44,7 +44,7 @@ export default function NotenschluesselEditor({ pruefungName = "Datenbanken II" 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <h3 style={{ fontSize: "0.9rem", fontWeight: "600", marginBottom: "4px" }}>
-        Notenschlüssel – {pruefungName}
+        {pruefungName ? `Notenschlüssel – ${pruefungName}` : "Notenschlüssel"}
       </h3>
       <p style={{ color: "#888", fontSize: "0.78rem", marginBottom: "20px" }}>
         Ab welchem Prozentsatz gilt welche Note?
