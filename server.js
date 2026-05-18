@@ -2,8 +2,6 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
-const { spawn } = require("child_process");
-const path = require("path");
 const { pruefungAuswerten, DEFAULT_NOTENSCHLUESSEL } = require("./logik");
 
 const app = express();
@@ -12,25 +10,39 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
-// ─── EasyOCR Python-Server ────────────────────────────────
-let ocrBereit = false;
-const ocrProc = spawn("python3", [path.join(__dirname, "ocr_server.py")]);
-ocrProc.stdout.on("data", d => {
-  const msg = d.toString();
-  process.stdout.write("[OCR] " + msg);
-  if (msg.includes("bereit")) ocrBereit = true;
-});
-ocrProc.stderr.on("data", d => process.stderr.write("[OCR] " + d.toString()));
-ocrProc.on("exit", code => console.log(`[OCR] Python-Prozess beendet (${code})`));
-process.on("exit", () => ocrProc.kill());
+// ─── Google Vision API ────────────────────────────────────
+const VISION_KEY = process.env.GOOGLE_VISION_KEY;
 
-async function easyOcr(pfade) {
-  const resp = await fetch("http://127.0.0.1:3001", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(pfade),
-  });
-  return resp.json();
+function normZiffernVision(text) {
+  return text
+    .replace(/[OoQD]/g, "0").replace(/[IiLl]/g, "1")
+    .replace(/[Ss]/g, "5").replace(/[Bb]/g, "8")
+    .replace(/[Zz]/g, "2").replace(/[Gg]/g, "9")
+    .replace(/[^0-9]/g, "");
+}
+
+async function googleVision(bildPfad) {
+  const fs = require("fs");
+  const b64 = fs.readFileSync(bildPfad).toString("base64");
+  const resp = await fetch(
+    `https://vision.googleapis.com/v1/images:annotate?key=${VISION_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requests: [{
+          image: { content: b64 },
+          features: [{ type: "TEXT_DETECTION" }],
+          imageContext: { languageHints: ["en"] },
+        }],
+      }),
+    }
+  );
+  const json = await resp.json();
+  const text = json.responses?.[0]?.textAnnotations?.[0]?.description
+    ?? json.responses?.[0]?.fullTextAnnotation?.text
+    ?? "";
+  return normZiffernVision(text);
 }
 
 // Hilfsfunktion: DB-Antwort parsen — auch bei leerem Body (z.B. 404 ohne JSON)
@@ -443,23 +455,17 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
         const ocrLinks = Math.max(0, labelMitte - BOX_W - Math.round(GAP_W / 2));
         const boxHoehe = Math.min(100, height - feldTop);
 
-        const b1Pfad = `/tmp/crop_A${aufgabeNr}_b1.png`;
-        const b2Pfad = `/tmp/crop_A${aufgabeNr}_b2.png`;
-        // 5px Rand-Inset um den Kastenrahmen rauszuschneiden, dann 3x hochskalieren + Schwellwert
+        // Beide Boxen als ein gemeinsames Bild (weniger API-Calls, bessere Erkennung)
+        const bPfad = `/tmp/crop_A${aufgabeNr}.png`;
         const INSET = 5;
-        const innerW = Math.max(10, BOX_W - INSET * 2);
+        const gesamtBreite = BOX_W * 2 + GAP_W;
         const innerH = Math.max(10, boxHoehe - INSET * 2);
-        fuerCrops.clone().crop(ocrLinks + INSET, feldTop + INSET, innerW, innerH)
-          .scale(3).threshold({ max: 140 }).write(b1Pfad);
-        fuerCrops.clone().crop(ocrLinks + BOX_W + GAP_W + INSET, feldTop + INSET, innerW, innerH)
-          .scale(3).threshold({ max: 140 }).write(b2Pfad);
+        fuerCrops.clone()
+          .crop(ocrLinks + INSET, feldTop + INSET, gesamtBreite - INSET * 2, innerH)
+          .scale(3).threshold({ max: 140 }).write(bPfad);
 
-        const ocrRes = await easyOcr({ b1: b1Pfad, b2: b2Pfad });
-        const d1 = ocrRes.b1?.d ?? "";
-        const d2 = ocrRes.b2?.d ?? "";
-        console.log(`  A${aufgabeNr}: box1="${d1}"(${ocrRes.b1?.c}) box2="${d2}"(${ocrRes.b2?.c})`);
-
-        const roh = (d1 + d2).replace(/[^0-9]/g, "");
+        const roh = await googleVision(bPfad);
+        console.log(`  A${aufgabeNr}: "${roh}"`);
         const punkte = parseFloat(roh);
 
         // Duplikate überspringen — gleiche aufgabeNr bereits vorhanden
