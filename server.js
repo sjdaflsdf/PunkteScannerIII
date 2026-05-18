@@ -209,7 +209,7 @@ app.post("/api/pruefungen/anlegen", async (req, res) => {
 // Aufgaben einer Prüfung abrufen
 app.get("/api/pruefungen/:id/aufgaben", async (req, res) => {
   try {
-    const response = await fetch(`${DB_URL}/pruefungen/${req.params.id}/aufgaben`);
+    cconst response = await fetch(`${DB_URL}/aufgaben/pruefung/${req.params.id}`);
     const data = await parseDbResponse(response);
     res.status(response.status).json(data);
   } catch (err) {
