@@ -1,7 +1,8 @@
 node_modules/
 **/node_modules/
-dist/
-**/dist/
+# Frontend/dist wird committed damit Render keinen Build-Step braucht
+# dist/
+# **/dist/
 build/
 .DS_Store
 **/.DS_Store
