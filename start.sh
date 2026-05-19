@@ -1,3 +1,4 @@
 #!/bin/bash
-kill -9 $(lsof -ti:3000) 2>/dev/null || true
+lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+sleep 1
 node server.js

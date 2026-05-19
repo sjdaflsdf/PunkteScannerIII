@@ -177,6 +177,8 @@ thead.rh td{padding-bottom:12px}
 .ocr{display:flex;gap:5px;margin-top:2px;justify-content:center;align-items:center}
 .ocrdigit{width:60px;height:50px;border:2.5px solid #000;border-radius:3px;background:#fff}
 .ocranker{width:0;height:0;border-top:4mm solid transparent;border-bottom:4mm solid transparent;border-left:4mm solid #000;margin-right:3mm;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.matdigits{display:flex;gap:3px;margin-top:4px}
+.matdigit{width:30px;height:36px;border:2.5px solid #000;border-radius:2px;background:#fff;flex-shrink:0}
 .bereich{border:1.5px solid #c8d8d2;border-top:none;border-radius:0 0 4px 4px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
 .hinweis{margin-top:10px;font-size:7pt;color:#bbb;text-align:center}
@@ -205,7 +207,7 @@ thead.rh td{padding-bottom:12px}
     </div>
     <div class="studi">
       <div><div class="slabel">Name, Vorname</div><div class="sline"></div></div>
-      <div><div class="slabel">Matrikelnummer</div><div class="sline"></div></div>
+      <div><div class="slabel">Matrikelnummer</div><div class="matdigits">${"<div class=\"matdigit\"></div>".repeat(8)}</div></div>
     </div>
   </div>
 </td></tr></thead>
@@ -450,7 +452,11 @@ thead.rh td{padding-bottom:12px}
                           </div>
                           <div>
                             <span style={templateLabelStyle}>Matrikelnummer</span>
-                            <div style={ausfuellFeldStyle} />
+                            <div style={{ display:"flex", gap:"2px", marginTop:"4px" }}>
+                              {Array.from({length:8}).map((_,k) => (
+                                <div key={k} style={{ width:"16px", height:"26px", border:"2px solid #000", borderRadius:"2px", backgroundColor:"#fff", flexShrink:0 }} />
+                              ))}
+                            </div>
                           </div>
                         </div>
                       </div>
