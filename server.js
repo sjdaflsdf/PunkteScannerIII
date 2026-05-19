@@ -83,6 +83,15 @@ async function parseDbResponse(response) {
 const DB_URL = "https://punktescanneriii.onrender.com/api";
 
 // ─── HEALTHCHECKS ────────────────────────────────────────
+app.get("/api/health/ocr", async (_req, res) => {
+  try {
+    const session = await holeMnistSession();
+    res.json({ status: "ok", inputs: session.inputNames, outputs: session.outputNames });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message, cause: err.cause?.message ?? null, stack: err.stack?.split("\n").slice(0, 5) });
+  }
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "punkte-scanner-api" });
 });
@@ -504,7 +513,13 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
     aufgaben.sort((a, b) => a.aufgabeNr - b.aufgabeNr);
     res.json({ matrikelnummer, aufgaben });
   } catch (err) {
-    res.status(500).json({ fehler: "OCR-Fehler: " + err.message });
+    console.error("OCR-Fehler stack:", err.stack);
+    console.error("OCR-Fehler cause:", err.cause);
+    res.status(500).json({
+      fehler: "OCR-Fehler: " + err.message,
+      cause: err.cause?.message ?? err.cause ?? null,
+      stack: err.stack?.split("\n").slice(0, 5),
+    });
   }
 });
 
