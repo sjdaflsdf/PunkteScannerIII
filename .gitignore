@@ -16,7 +16,6 @@ build/
 .idea/
 # Claude Code
 .claude/
-# ONNX-Modell (nicht mehr genutzt)
-*.onnx
+
 # Lokale Test-Hilfsmittel
 test-scanner.html
