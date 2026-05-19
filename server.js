@@ -423,39 +423,48 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
       return runs;
     }
 
-    // Template-Koordinaten bei exakt 1440px Breite (A4-Vorlage, 1 CSS px ≈ 1.817 scan px)
-    const TW      = 1440;
-    const OCR_L   = 1185;  // linke Kante der Punktebox
-    const OCR_W   = 109;   // Breite der Punktebox (60 CSS px × 1.817)
-    const OCR_H   = 91;    // Höhe einer Punktebox (50 CSS px × 1.817)
-    const ANKER_X = 1150;  // X-Spalte für Dreieck-Anker-Scan
-    const INSET   = 10;    // Einzug vom Boxrahmen für sauberen Crop
-    // Matrikel: 8 individuelle Kästchen (30×36 CSS px) → 54×65 scan px, Abstand 33 CSS px = 60 scan px
-    const MAT_BOX_X0 = 920;  // scan-X linke Kante erste Box (≈918px berechnet)
-    const MAT_BOX_W  = 54;   // Breite (30 CSS px × 1.817)
-    const MAT_BOX_H  = 65;   // Höhe (36 CSS px × 1.817)
-    const MAT_BOX_DX = 60;   // Abstand Box-zu-Box (33 CSS px × 1.817)
-    const MAT_BOX_Y0 = 200;  // Y-Oberkante der Matrikelboxen im Header
+    // Template-Koordinaten bei 1440px Breite (1 CSS px = 1.814 scan px, 1mm = 6.857 scan px)
+    const TW         = 1440;
+    const OCR_L      = 1190;  // linke Kante ocrdigit (berechnet: 1189px)
+    const OCR_W      = 109;   // Breite ocrdigit (60 CSS px × 1.814)
+    const OCR_H      = 91;    // Höhe ocrdigit (50 CSS px × 1.814)
+    const INSET      = 10;    // Einzug vom Boxrahmen
+    const MAT_BOX_X0 = 918;   // scan-X linke Kante erste Matrikelbox
+    const MAT_BOX_W  = 54;    // Breite (30 CSS px × 1.814)
+    const MAT_BOX_H  = 65;    // Höhe (36 CSS px × 1.814)
+    const MAT_BOX_DX = 60;    // Abstand Box-zu-Box (33 CSS px × 1.814)
+    const MAT_BOX_Y0 = 225;   // Y-Mitte der Matrikelboxen im Header
 
     function findeBoxPositionen(bild) {
       const thresh = bild.clone().threshold({ max: 80 });
       const { width, height, data } = thresh.bitmap;
 
-      // Strategie 1: Dreieck-Anker (▶) links neben der Box
-      const ankerRuns = scanSpalte(data, width, height, ANKER_X, 45, 70);
-      if (ankerRuns.length > 0) {
-        console.log(`  Anker-Methode: ${ankerRuns.length} Dreiecke bei x=${ANKER_X}`);
-        return ankerRuns.map(r => ({ y0: r.y0, y1: r.y0 + OCR_H }));
+      // Strategie 1: Dreieck-Anker (▶) — X-Bereich scannen statt fester Punkt
+      // Dreieck liegt rechnerisch bei x≈1160–1187, Scanner-Offset unbekannt → ±40px Puffer
+      for (let x = 1120; x <= 1200; x += 4) {
+        const runs = scanSpalte(data, width, height, x, 45, 70);
+        if (runs.length >= 2) {
+          console.log(`  Anker-Methode: ${runs.length} Dreiecke bei x=${x}`);
+          return runs.map(r => ({ y0: r.y0, y1: r.y0 + OCR_H }));
+        }
       }
 
-      // Strategie 2: Boxrahmen-Scan (Fallback)
-      const rahmenRuns = scanSpalte(data, width, height, OCR_L + 2, 70, 110);
-      console.log(`  Rahmen-Methode (Fallback): ${rahmenRuns.length} Boxen bei x=${OCR_L + 2}`);
-      return rahmenRuns;
+      // Strategie 2: Boxrahmen-Scan (Fallback) — ebenfalls X-Bereich
+      for (let x = 1180; x <= 1220; x += 3) {
+        const runs = scanSpalte(data, width, height, x, 70, 110);
+        if (runs.length >= 1) {
+          console.log(`  Rahmen-Methode: ${runs.length} Boxen bei x=${x}`);
+          return runs;
+        }
+      }
+
+      console.log("  Keine Boxen gefunden");
+      return [];
     }
 
     let matrikelnummer = null;
     const aufgaben = [];
+    let aufgabeCounter = 0;  // globaler Zähler über alle Seiten
 
     for (const datei of req.files) {
       const eingelesen = await Jimp.read(datei.buffer);
@@ -481,12 +490,7 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
           console.log(`  Matrikel[${k}]: ${ziffer.digit} (conf=${ziffer.conf.toFixed(2)})`);
           ziffern.push(ziffer.conf > 0.5 ? ziffer.digit : null);
         }
-        const rohMatrikel = ziffern.map(z => z !== null ? String(z) : "?").join("");
-        if (!rohMatrikel.includes("?")) {
-          matrikelnummer = rohMatrikel;
-        } else {
-          matrikelnummer = rohMatrikel; // trotzdem übernehmen, ? markiert unsichere Stellen
-        }
+        matrikelnummer = ziffern.map(z => z !== null ? String(z) : "?").join("");
         console.log(`Matrikelnummer: ${matrikelnummer}`);
       }
 
@@ -496,17 +500,18 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
 
       // ── 3. Jede Box einzeln per MNIST erkennen ───────────────────────
       for (let i = 0; i < boxPositionen.length; i++) {
+        aufgabeCounter++;
         const { y0: boxTop, y1: boxBottom } = boxPositionen[i];
         const cropT  = Math.max(0, boxTop + INSET);
         const cropCH = Math.max(10, Math.min(boxBottom - boxTop - 2 * INSET, H - cropT));
         const cropL2 = Math.max(0, OCR_L + INSET);
         const cropCW = Math.max(10, OCR_W - 2 * INSET);
-        console.log(`  A${i+1}: boxTop=${boxTop} cropT=${cropT} cropH=${cropCH}`);
+        console.log(`  A${aufgabeCounter}: boxTop=${boxTop} cropT=${cropT} cropH=${cropCH}`);
 
         const boxImg = fuerCrops.clone().crop(cropL2, cropT, cropCW, cropCH);
         const punkte = await erkennPunktzahl(boxImg);
-        console.log(`  A${i+1}: → ${punkte}`);
-        aufgaben.push({ aufgabeNr: i + 1, bezeichnung: `Aufgabe ${i+1}`, erreichterPunkte: punkte });
+        console.log(`  A${aufgabeCounter}: → ${punkte}`);
+        aufgaben.push({ aufgabeNr: aufgabeCounter, bezeichnung: `Aufgabe ${aufgabeCounter}`, erreichterPunkte: punkte });
       }
     }
 
