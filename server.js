@@ -501,13 +501,5 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
   }
 });
 
-// ─── Frontend (gebuildetes React) servieren ───────────────
-const path = require("path");
-const frontendDist = path.join(__dirname, "Frontend", "dist");
-app.use(express.static(frontendDist));
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(frontendDist, "index.html"));
-});
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API läuft auf Port ${PORT}`));
