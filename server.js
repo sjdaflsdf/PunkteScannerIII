@@ -10,40 +10,29 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
-// ─── Google Vision API ────────────────────────────────────
-const VISION_KEY = process.env.GOOGLE_VISION_KEY;
+// ─── Tesseract: ein einziger Worker für Ziffern ──────────
+let _worker = null;
+let _initPromise = null;
 
-function normZiffernVision(text) {
-  return text
-    .replace(/[OoQD]/g, "0").replace(/[IiLl]/g, "1")
-    .replace(/[Ss]/g, "5").replace(/[Bb]/g, "8")
-    .replace(/[Zz]/g, "2").replace(/[Gg]/g, "9")
-    .replace(/[^0-9]/g, "");
+function holeWorker() {
+  if (_worker) return Promise.resolve(_worker);
+  if (_initPromise) return _initPromise;
+  _initPromise = (async () => {
+    const { createWorker } = require("tesseract.js");
+    const lp = __dirname;
+    _worker = await createWorker("eng", 1, { langPath: lp, cachePath: lp });
+    await _worker.setParameters({
+      tessedit_pageseg_mode: "7",
+      tessedit_char_whitelist: "0123456789",
+    });
+    console.log("Tesseract bereit");
+    return _worker;
+  })();
+  return _initPromise;
 }
 
-async function googleVision(bildPfad) {
-  const fs = require("fs");
-  const b64 = fs.readFileSync(bildPfad).toString("base64");
-  const resp = await fetch(
-    `https://vision.googleapis.com/v1/images:annotate?key=${VISION_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        requests: [{
-          image: { content: b64 },
-          features: [{ type: "TEXT_DETECTION" }],
-          imageContext: { languageHints: ["en"] },
-        }],
-      }),
-    }
-  );
-  const json = await resp.json();
-  const text = json.responses?.[0]?.textAnnotations?.[0]?.description
-    ?? json.responses?.[0]?.fullTextAnnotation?.text
-    ?? "";
-  return normZiffernVision(text);
-}
+// Tesseract beim Server-Start vorwärmen → erster Scan sofort schnell
+setImmediate(() => holeWorker().catch(() => {}));
 
 // Hilfsfunktion: DB-Antwort parsen — auch bei leerem Body (z.B. 404 ohne JSON)
 async function parseDbResponse(response) {
@@ -314,8 +303,49 @@ app.post("/api/pruefungen/batch", async (req, res) => {
   res.json({ ergebnisse, fehler });
 });
 
+// ─── Bild-Ausrichtung via Eckmarker ───────────────────────
+// Die schwarzen Dreiecke in den Seitenecken des Templates werden
+// gesucht um Winkel und Maßstab automatisch zu korrigieren.
+function ausrichten(bild, Jimp) {
+  const W = bild.bitmap.width;
+  const R = Math.round(160 * W / 1440); // Suchregion skaliert mit Bildbreite
+
+  // Schwellwert-Bild für Marker-Suche
+  const thresh = bild.clone().greyscale().threshold({ max: 60 });
+  const { data, width, height } = thresh.bitmap;
+
+  // Schwerpunkt dunkler Pixel in einem Rechteck berechnen
+  function schwerpunkt(x0, x1, y0, y1) {
+    let sx = 0, sy = 0, n = 0;
+    for (let y = Math.max(0,y0); y < Math.min(height,y1); y++) {
+      for (let x = Math.max(0,x0); x < Math.min(width,x1); x++) {
+        if (data[(y * width + x) * 4] < 128) { sx += x; sy += y; n++; }
+      }
+    }
+    return n > 20 ? { x: sx / n, y: sy / n } : null;
+  }
+
+  const tl = schwerpunkt(0, R, 0, R);
+  const tr = schwerpunkt(W - R, W, 0, R);
+
+  if (!tl || !tr) {
+    console.log("Eckmarker nicht gefunden – kein Winkel-Fix");
+    return bild;
+  }
+
+  const winkel = Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI;
+  console.log(`Eckmarker: TL=(${Math.round(tl.x)},${Math.round(tl.y)}) TR=(${Math.round(tr.x)},${Math.round(tr.y)}) Winkel=${winkel.toFixed(2)}°`);
+
+  if (Math.abs(winkel) > 0.3) {
+    bild.rotate(-winkel);
+  }
+  return bild;
+}
+
 // ─── ENDPUNKT 11 ──────────────────────────────────────────
 // OCR: Klausurseiten scannen → Matrikelnummer + Punkte extrahieren
+// Template-basierter Ansatz: feste X-Koordinaten aus CSS-Vorlage,
+// nur schmale Streifen scannen statt Vollseite → deutlich schneller
 app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ fehler: "Keine Dateien hochgeladen." });
@@ -323,173 +353,160 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
 
   try {
     const Jimp = require("jimp");
-    const { createWorker } = require("tesseract.js");
+    const worker = await holeWorker();
 
-    const langPath = __dirname;
+    async function zuBuffer(img) { return img.getBufferAsync(Jimp.MIME_PNG); }
 
-    // Tesseract für Anker-Erkennung + Matrikelnummer
-    const workerVoll    = await createWorker("deu", 1, { langPath, cachePath: langPath });
-    const workerZiffern = await createWorker("eng", 1, { langPath, cachePath: langPath });
-    await workerZiffern.setParameters({ tessedit_pageseg_mode: "7" });
-
-    async function zuBuffer(jimpBild) {
-      return jimpBild.getBufferAsync(Jimp.MIME_PNG);
+    // Findet Y-Positionen der Ziffernboxen über Pixel-Analyse.
+    // Die schwarzen Boxrahmen (border:2.5px solid #000) bilden bei bekanntem X
+    // eine durchgehende dunkle Spalte → schnell, kein OCR nötig.
+    // Scannt eine vertikale Spalte und gibt alle dunklen Pixel-Runs zurück
+    function scanSpalte(data, width, height, scanX, minH, maxH) {
+      const dunkel = [];
+      for (let y = 0; y < height; y++) {
+        if (data[(y * width + scanX) * 4] < 100) dunkel.push(y);
+      }
+      if (dunkel.length === 0) return [];
+      const runs = [];
+      let start = dunkel[0], prev = dunkel[0];
+      for (let i = 1; i < dunkel.length; i++) {
+        if (dunkel[i] - prev > 4) {
+          const h = prev - start;
+          if (h >= minH && h <= maxH) runs.push({ y0: start, y1: prev });
+          start = dunkel[i];
+        }
+        prev = dunkel[i];
+      }
+      const h = prev - start;
+      if (h >= minH && h <= maxH) runs.push({ y0: start, y1: prev });
+      return runs;
     }
+
+    function findeBoxPositionen(bild) {
+      const thresh = bild.clone().threshold({ max: 80 });
+      const { width, height, data } = thresh.bitmap;
+
+      // Strategie 1: Dreieck-Anker (▶) links neben der Box.
+      // Das Dreieck: border-top:4mm + border-bottom:4mm = 8mm ≈ 55px bei 1440px.
+      // X-Position: .apkt left (~1143) + padding (18) + centered offset (~4) = ~1165
+      const ANKER_X = 1165;
+      const ankerRuns = scanSpalte(data, width, height, ANKER_X, 45, 70);
+      if (ankerRuns.length > 0) {
+        console.log(`  Anker-Methode: ${ankerRuns.length} Dreiecke bei x=${ANKER_X}`);
+        // Dreieck-Mitte → Box-Top: Dreieck liegt auf Höhe der Boxen (align-items:center)
+        return ankerRuns.map(r => ({ y0: r.y0, y1: r.y0 + OCR_H }));
+      }
+
+      // Strategie 2: Boxrahmen-Scan (Fallback)
+      // Der linke Rahmen der ersten Box ist 91px hoch bei x=OCR_L+2
+      const rahmenRuns = scanSpalte(data, width, height, OCR_L + 2, 70, 110);
+      console.log(`  Rahmen-Methode (Fallback): ${rahmenRuns.length} Boxen bei x=${OCR_L + 2}`);
+      return rahmenRuns;
+    }
+
+    // Template-Koordinaten bei exakt 1440px Breite (A4-Vorlage)
+    const TW    = 1440;
+    const OCR_L = 1200;  // linke Kante der Ziffernbox (60px CSS: .apkt left ~1143 + padding 18 + anchor ~39 = ~1200)
+    const OCR_W = 109;   // Breite: 1 Box (60 CSS px × 1.814)
+    const OCR_H = 91;    // Höhe einer Box (50 CSS px × 1.814)
+    const MAT_X = 1050;  // ab hier liegt das Matrikel-Feld im Header
+    const HDR_H = 160;   // Header-Höhe
+    const INSET = 12;    // Einzug vom Boxrahmen
 
     let matrikelnummer = null;
     const aufgaben = [];
 
     for (const datei of req.files) {
-      const original = await Jimp.read(datei.buffer);
-      const { width, height } = original.bitmap;
-      console.log(`Bildgröße: ${width}x${height}`);
+      const eingelesen = await Jimp.read(datei.buffer);
+      console.log(`Originalgröße: ${eingelesen.bitmap.width}x${eingelesen.bitmap.height}`);
 
-      // Vorverarbeitung für Anker-Erkennung: Graustufen + Kontrast
-      const fuerAnker = original.clone()
-        .greyscale()
-        .normalize()
-        .contrast(0.3);
+      // Bild ausrichten (Eckmarker-Erkennung) + auf 1440px normalisieren
+      const original = ausrichten(eingelesen, Jimp).resize(TW, Jimp.AUTO);
+      const { width: W, height: H } = original.bitmap;
+      console.log(`Normalisiert: ${W}x${H}`);
 
-      // Vorverarbeitung für Crops: Graustufen + stärkerer Kontrast
-      const fuerCrops = original.clone()
-        .greyscale()
-        .normalize()
-        .contrast(0.5);
+      const fuerCrops = original.clone().greyscale().normalize().contrast(0.5);
 
-      // Vollseiten-OCR mit Bounding-Boxes
-      const { data } = await workerVoll.recognize(await zuBuffer(fuerAnker));
-
-      // Wörter aus hierarchischer Struktur extrahieren
-      const alleWoerter = (data.blocks ?? []).flatMap(b =>
-        (b.paragraphs ?? []).flatMap(p =>
-          (p.lines ?? []).flatMap(l => l.words ?? [])
-        )
-      );
-      const woerter = (alleWoerter.length ? alleWoerter : data.words ?? [])
-        .filter(w => w.bbox);
-
-      // Zeilenebene als Fallback für Anker mit Bounding Boxes
-      const zeilen = (data.blocks ?? []).flatMap(b =>
-        (b.paragraphs ?? []).flatMap(p => p.lines ?? [])
-      ).filter(l => l.bbox);
-
-      console.log(`=== Seite: ${woerter.length} Wörter, ${zeilen.length} Zeilen ===`);
-      woerter.filter(w => w.confidence > 40).forEach(w =>
-        console.log(`"${w.text}" conf=${Math.round(w.confidence)} bbox=${JSON.stringify(w.bbox)}`)
-      );
-
-      // ── Matrikelnummer ──
+      // ── 1. Matrikelnummer: obere rechte Ecke scannen ──────────────────
+      // Nur Ziffern OCR → Buchstaben werden ignoriert, lange Ziffernfolge = Matrikel
       if (!matrikelnummer) {
-        const matrikelAnker =
-          woerter.find(w => /matrikel/i.test(w.text)) ??
-          zeilen.find(l => /matrikel/i.test(l.text));
-        if (matrikelAnker) {
-          const { x0, y0, x1, y1 } = matrikelAnker.bbox;
-          // Student schreibt rechts neben "Matrikel:" auf die Linie → rechts croppen
-          const cropLeft   = Math.min(x1 + 4, width - 10);
-          const cropTop    = Math.max(0, y0 - 4);
-          const cropWidth  = Math.min(260, width - cropLeft);
-          const cropHeight = Math.min(y1 - y0 + 14, height - cropTop);
-
-          const matrikelCrop = fuerCrops.clone()
-            .crop(cropLeft, cropTop, cropWidth, cropHeight)
-            .scale(4)
-            .threshold({ max: 140 });
-          matrikelCrop.write("/tmp/crop_matrikel.png");
-
-          const { data: md } = await workerZiffern.recognize(await zuBuffer(matrikelCrop));
-          const normMd = md.text
-            .replace(/[OoQDd]/g, "0").replace(/[IiLl]/g, "1")
-            .replace(/[Ss]/g, "5").replace(/[Bb]/g, "8")
-            .replace(/[Zz]/g, "2").replace(/[Gg]/g, "9");
-          const ziffern = normMd.replace(/[^0-9]/g, "");
-          if (ziffern.length >= 7) matrikelnummer = ziffern.slice(0, 8);
+        const matBuf = await zuBuffer(
+          fuerCrops.clone().crop(MAT_X, 0, W - MAT_X, HDR_H).scale(3).threshold({ max: 140 })
+        );
+        const { data: md } = await worker.recognize(matBuf);
+        const norm = md.text
+          .replace(/[OoQDd]/g, "0").replace(/[IiLl]/g, "1")
+          .replace(/[Ss]/g, "5").replace(/[Bb]/g, "8")
+          .replace(/[Zz]/g, "2").replace(/[Gg]/g, "9");
+        // Alle Ziffernblöcke extrahieren, längsten (= Matrikel) nehmen
+        const bloecke = norm.replace(/[^0-9]+/g, " ").trim().split(/\s+/).filter(b => b.length >= 7);
+        if (bloecke.length > 0) {
+          matrikelnummer = bloecke.sort((a, b) => b.length - a.length)[0].slice(0, 8);
         }
-
-        // Fallback: erste 7-8-stellige Zahl im Volltext (mit OCR-Zeichenkorrektur)
-        if (!matrikelnummer) {
-          const normVoll = (data.text ?? "")
-            .replace(/S/g, "5").replace(/s/g, "5")
-            .replace(/O/g, "0").replace(/o/g, "0")
-            .replace(/I/g, "1").replace(/l/g, "1")
-            .replace(/Z/g, "2").replace(/B/g, "8");
-          const fb = normVoll.match(/\b(\d{7,8})\b/);
-          if (fb) matrikelnummer = fb[1];
-        }
+        console.log(`Matrikelnummer: ${matrikelnummer ?? "nicht erkannt"}`);
       }
 
-      // ── Punkte aus den Aufgaben-Feldern ──
-      // Suche "A{n} ERREICHT" Zeilen — Aufgabennummer steht direkt davor
-      const erreichtZeilen = zeilen
-        .filter(l => /ERREICHT/i.test(l.text))
-        .sort((a, b) => a.bbox.y0 - b.bbox.y0);
+      // ── 2. Ziffernbox-Positionen per Pixel-Analyse finden ────────────
+      // Kein Tesseract nötig: schwarze Boxrahmen an bekanntem X bilden dunkle Spalten
+      const boxPositionen = findeBoxPositionen(fuerCrops);
+      console.log(`Ziffernboxen gefunden: ${boxPositionen.length}`);
 
-      // Fallback: einzelne ERREICHT-Wörter ohne Nummer
-      const erreichtWoerter = woerter
-        .filter(w => /^ERREICHT[:]?$/i.test(w.text))
-        .sort((a, b) => a.bbox.y0 - b.bbox.y0);
+      // ── 3. Alle Aufgaben-Crops stapeln → ein einziger OCR-Aufruf ────────
+      const SCALE   = 3;
+      const cropL   = Math.max(0, OCR_L + INSET);
+      const cropCW  = Math.max(10, OCR_W - 2 * INSET);
+      const ZEILEN_H = Math.round((OCR_H - 2 * INSET) * SCALE);
+      const GAP      = 20;  // px Abstand zwischen Zeilen im gestapelten Bild
 
-      const erreichtLabels = erreichtZeilen.length ? erreichtZeilen : erreichtWoerter;
-      console.log(`ERREICHT-Anker: ${erreichtLabels.length} (${erreichtZeilen.length} Zeilen, ${erreichtWoerter.length} Wörter)`);
+      if (boxPositionen.length > 0) {
+        const gesH = boxPositionen.length * ZEILEN_H + (boxPositionen.length - 1) * GAP;
+        const gesB = Math.round(cropCW * SCALE);
+        const stapel = new Jimp(gesB, gesH, 0xffffffff);
 
-      for (const label of erreichtLabels) {
-        // Aufgabennummer aus "A3 ERREICHT" extrahieren (5/S und 2/Z Verwechslungen korrigieren)
-        const normText = (label.text ?? "").replace(/S/g, "5").replace(/Z/g, "2").replace(/O/g, "0").replace(/I/g, "1").replace(/l/g, "1");
-        const numMatch = normText.match(/A(\d+)\s*ERREICHT/i);
-        const aufgabeNr = numMatch ? parseInt(numMatch[1]) : (aufgaben.length + 1);
-        console.log(`  → Aufgabe ${aufgabeNr} erkannt aus: "${label.text}"`);
+        for (let i = 0; i < boxPositionen.length; i++) {
+          const { y0: boxTop, y1: boxBottom } = boxPositionen[i];
+          const cropT  = Math.max(0, boxTop + INSET);
+          const cropCH = Math.max(10, Math.min(boxBottom - boxTop - 2 * INSET, H - cropT));
+          console.log(`  A${i+1}: boxTop=${boxTop} cropT=${cropT} cropH=${cropCH}`);
 
-        const feldLeft   = Math.max(0, label.bbox.x0 - 5);
-        const feldTop    = Math.min(height - 1, label.bbox.y1 + 6);
-        const feldWidth  = Math.min(200, width - feldLeft);
-        const feldHeight = Math.min(100, height - feldTop);
+          const slice = fuerCrops.clone()
+            .crop(cropL, cropT, cropCW, cropCH)
+            .scale(SCALE).threshold({ max: 160 })
+            .resize(gesB, ZEILEN_H);
 
-        console.log(`  Aufgabe ${aufgabeNr}: crop L=${feldLeft} T=${feldTop} W=${feldWidth} H=${feldHeight}`);
-
-        if (feldWidth <= 0 || feldHeight <= 0) continue;
-
-        // Zwei Ziffernboxen per EasyOCR erkennen
-        const labelMitte = Math.round((label.bbox.x0 + label.bbox.x1) / 2);
-        const BOX_W = 69;
-        const GAP_W = 9;
-        const ocrLinks = Math.max(0, labelMitte - BOX_W - Math.round(GAP_W / 2));
-        const boxHoehe = Math.min(100, height - feldTop);
-
-        // Beide Boxen als ein gemeinsames Bild (weniger API-Calls, bessere Erkennung)
-        const bPfad = `/tmp/crop_A${aufgabeNr}.png`;
-        const INSET = 5;
-        const gesamtBreite = BOX_W * 2 + GAP_W;
-        const innerH = Math.max(10, boxHoehe - INSET * 2);
-        fuerCrops.clone()
-          .crop(ocrLinks + INSET, feldTop + INSET, gesamtBreite - INSET * 2, innerH)
-          .scale(3).threshold({ max: 140 }).write(bPfad);
-
-        const roh = await googleVision(bPfad);
-        console.log(`  A${aufgabeNr}: "${roh}"`);
-        const punkte = parseFloat(roh);
-
-        // Duplikate überspringen — gleiche aufgabeNr bereits vorhanden
-        if (aufgaben.some(a => a.aufgabeNr === aufgabeNr)) {
-          console.log(`  Aufgabe ${aufgabeNr} übersprungen (Duplikat)`);
-          continue;
+          if (i <= 4) slice.clone().write(`/tmp/debug_A${i+1}.png`);
+          stapel.composite(slice, 0, i * (ZEILEN_H + GAP));
         }
 
-        aufgaben.push({
-          aufgabeNr,
-          bezeichnung: `Aufgabe ${aufgabeNr}`,
-          erreichterPunkte: isNaN(punkte) ? null : Math.round(punkte * 10) / 10,
-        });
+        await worker.setParameters({ tessedit_pageseg_mode: "6" });
+        const { data: zd } = await worker.recognize(await zuBuffer(stapel));
+        await worker.setParameters({ tessedit_pageseg_mode: "7" });
+
+        const zeilen = zd.text.split("\n").map(z => z.replace(/[^0-9]/g, "")).filter(z => z.length > 0);
+        console.log(`  OCR-Zeilen (${zeilen.length}): ${zeilen.join(", ")}`);
+
+        for (let i = 0; i < boxPositionen.length; i++) {
+          const roh = zeilen[i] ?? "";
+          const punkte = roh.length > 0 ? parseInt(roh.slice(0, 2)) : null;
+          console.log(`  A${i+1}: "${roh}" → ${punkte}`);
+          aufgaben.push({ aufgabeNr: i + 1, bezeichnung: `Aufgabe ${i+1}`, erreichterPunkte: punkte });
+        }
       }
     }
-
-    await workerVoll.terminate();
-    await workerZiffern.terminate();
 
     aufgaben.sort((a, b) => a.aufgabeNr - b.aufgabeNr);
     res.json({ matrikelnummer, aufgaben });
   } catch (err) {
     res.status(500).json({ fehler: "OCR-Fehler: " + err.message });
   }
+});
+
+// ─── Frontend (gebuildetes React) servieren ───────────────
+const path = require("path");
+const frontendDist = path.join(__dirname, "Frontend", "dist");
+app.use(express.static(frontendDist));
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(frontendDist, "index.html"));
 });
 
 const PORT = process.env.PORT || 3000;
