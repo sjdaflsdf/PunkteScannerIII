@@ -197,7 +197,7 @@ thead.rh td{padding-bottom:12px}
 .ah{display:flex;align-items:stretch;border:1.5px solid #c8d8d2;border-radius:4px 4px 0 0;overflow:hidden;background:#f6faf8}
 .anr{background:#2d5a4b;color:white;font-weight:700;font-size:11pt;min-width:38px;display:flex;align-items:center;justify-content:center;padding:8px;flex-shrink:0}
 .atext{flex:1;padding:9px 12px;font-size:10pt;line-height:1.5;word-wrap:break-word}
-.apkt{border-left:1.5px solid #c8d8d2;width:96px;flex-shrink:0;padding:6px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.apkt{border-left:4px solid #000;width:96px;flex-shrink:0;padding:6px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .plabel{font-size:6pt;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;text-align:center;line-height:1.3}
 .erreicht{margin-top:4px;font-size:7pt;font-weight:900;color:#000;letter-spacing:.06em}
 .pzahl{font-size:13pt;font-weight:700;color:#2d5a4b}
@@ -567,7 +567,7 @@ thead.rh td{padding-bottom:12px}
                             {aufgabe.bezeichnung}
                           </div>
                           <div style={{
-                            borderLeft: "1px solid #c8d8d2", padding: "8px 12px",
+                            borderLeft: "4px solid #000", padding: "8px 12px",
                             display: "flex", flexDirection: "column",
                             alignItems: "center", justifyContent: "center",
                             gap: "5px", minWidth: "110px",

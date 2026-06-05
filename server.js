@@ -28,18 +28,76 @@ function holeMnistSession() {
 
 setImmediate(() => holeMnistSession().catch(e => console.error("MNIST load:", e.message)));
 
+// Otsu-Methode: optimalen Binärschwellwert aus Histogramm berechnen
+function otsuSchwellwert(jimpImg) {
+  const { data } = jimpImg.bitmap;
+  const hist = new Array(256).fill(0);
+  const total = data.length / 4;
+  for (let i = 0; i < data.length; i += 4) hist[data[i]]++;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sumB = 0, wB = 0, best = 0, threshold = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const between = wB * wF * ((sumB / wB) - ((sum - sumB) / wF)) ** 2;
+    if (between > best) { best = between; threshold = t; }
+  }
+  return threshold;
+}
+
+// Bounding-Box der hellen (Ziffer-)Pixel im bereits invertierten Bild
+function zifferBbox(binaryImg) {
+  const { data, width, height } = binaryImg.bitmap;
+  let minX = width, maxX = 0, minY = height, maxY = 0, found = false;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4] > 128) {
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        found = true;
+      }
+    }
+  }
+  return found ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } : null;
+}
+
 async function erkennZiffer(jimpImg) {
   const ort = require("onnxruntime-node");
   const session = await holeMnistSession();
-  const img = jimpImg.clone().greyscale().threshold({ max: 128 }).invert().resize(28, 28);
+
+  const grau = jimpImg.clone().greyscale();
+  const schwelle = otsuSchwellwert(grau);
+  let img = grau.threshold({ max: schwelle }).invert();
+
+  // Ziffer zentrieren: bounding box finden, quadratisch padden
+  const bbox = zifferBbox(img);
+  if (bbox && bbox.w > 2 && bbox.h > 2) {
+    const Jimp = require("jimp");
+    const pad = 4;
+    const cx = Math.max(0, bbox.x - pad);
+    const cy = Math.max(0, bbox.y - pad);
+    const cw = Math.min(img.bitmap.width - cx, bbox.w + 2 * pad);
+    const ch = Math.min(img.bitmap.height - cy, bbox.h + 2 * pad);
+    img = img.crop(cx, cy, cw, ch);
+    const size = Math.max(cw, ch);
+    const canvas = new Jimp(size, size, 0x000000ff);
+    canvas.composite(img, Math.floor((size - cw) / 2), Math.floor((size - ch) / 2));
+    img = canvas;
+  }
+
+  img = img.resize(28, 28);
   const { data } = img.bitmap;
   const input = new Float32Array(28 * 28);
   for (let i = 0; i < 28 * 28; i++) input[i] = data[i * 4] / 255;
   const tensor = new ort.Tensor("float32", input, [1, 1, 28, 28]);
   const out = await session.run({ [session.inputNames[0]]: tensor });
   const scores = Array.from(out[session.outputNames[0]].data);
-  const max = Math.max(...scores);
-  const exps = scores.map(x => Math.exp(x - max));
+  const maxS = Math.max(...scores);
+  const exps = scores.map(x => Math.exp(x - maxS));
   const sum = exps.reduce((a, b) => a + b);
   const probs = exps.map(x => x / sum);
   const digit = probs.indexOf(Math.max(...probs));
@@ -352,17 +410,15 @@ app.post("/api/pruefungen/batch", async (req, res) => {
 });
 
 // ─── Bild-Ausrichtung via Eckmarker ───────────────────────
-// Die schwarzen Dreiecke in den Seitenecken des Templates werden
-// gesucht um Winkel und Maßstab automatisch zu korrigieren.
+// Alle 4 Eckmarker werden gesucht. Winkel wird aus oben + unten gemittelt
+// für robustere Korrektur bei Handyfoto-Perspektive.
 function ausrichten(bild, Jimp) {
   const W = bild.bitmap.width;
-  const R = Math.round(160 * W / 1440); // Suchregion skaliert mit Bildbreite
+  const R = Math.round(160 * W / 1440);
 
-  // Schwellwert-Bild für Marker-Suche
   const thresh = bild.clone().greyscale().threshold({ max: 60 });
   const { data, width, height } = thresh.bitmap;
 
-  // Schwerpunkt dunkler Pixel in einem Rechteck berechnen
   function schwerpunkt(x0, x1, y0, y1) {
     let sx = 0, sy = 0, n = 0;
     for (let y = Math.max(0,y0); y < Math.min(height,y1); y++) {
@@ -375,14 +431,19 @@ function ausrichten(bild, Jimp) {
 
   const tl = schwerpunkt(0, R, 0, R);
   const tr = schwerpunkt(W - R, W, 0, R);
+  const bl = schwerpunkt(0, R, height - R, height);
+  const br = schwerpunkt(W - R, W, height - R, height);
 
   if (!tl || !tr) {
     console.log("Eckmarker nicht gefunden – kein Winkel-Fix");
     return bild;
   }
 
-  const winkel = Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI;
-  console.log(`Eckmarker: TL=(${Math.round(tl.x)},${Math.round(tl.y)}) TR=(${Math.round(tr.x)},${Math.round(tr.y)}) Winkel=${winkel.toFixed(2)}°`);
+  const winkelOben  = Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI;
+  const winkelUnten = (bl && br) ? Math.atan2(br.y - bl.y, br.x - bl.x) * 180 / Math.PI : winkelOben;
+  const winkel = (winkelOben + winkelUnten) / 2;
+
+  console.log(`Eckmarker: TL=(${Math.round(tl.x)},${Math.round(tl.y)}) TR=(${Math.round(tr.x)},${Math.round(tr.y)}) Winkel=${winkel.toFixed(2)}° (oben=${winkelOben.toFixed(2)}° unten=${winkelUnten.toFixed(2)}°)`);
 
   if (Math.abs(winkel) > 0.3) {
     bild.rotate(-winkel);
@@ -439,21 +500,22 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
       const thresh = bild.clone().threshold({ max: 80 });
       const { width, height, data } = thresh.bitmap;
 
-      // Strategie 1: Dreieck-Anker (▶) — X-Bereich scannen statt fester Punkt
-      // Dreieck liegt rechnerisch bei x≈1160–1187, Scanner-Offset unbekannt → ±40px Puffer
-      for (let x = 1120; x <= 1200; x += 4) {
-        const runs = scanSpalte(data, width, height, x, 45, 70);
+      // Primär: linker schwarzer Balken von .apkt (4px solid #000)
+      // Liegt rechnerisch bei x≈1142, Scanner-Offset ±40px → Bereich 1100–1180
+      // Höhe = Task-Header-Höhe: min ~60, max ~300 scan px
+      for (let x = 1100; x <= 1180; x += 4) {
+        const runs = scanSpalte(data, width, height, x, 60, 300);
         if (runs.length >= 2) {
-          console.log(`  Anker-Methode: ${runs.length} Dreiecke bei x=${x}`);
+          console.log(`  Balken-Methode: ${runs.length} Aufgaben bei x=${x}`);
           return runs.map(r => ({ y0: r.y0, y1: r.y0 + OCR_H }));
         }
       }
 
-      // Strategie 2: Boxrahmen-Scan (Fallback) — ebenfalls X-Bereich
+      // Fallback: Boxrahmen-Scan
       for (let x = 1180; x <= 1220; x += 3) {
         const runs = scanSpalte(data, width, height, x, 70, 110);
         if (runs.length >= 1) {
-          console.log(`  Rahmen-Methode: ${runs.length} Boxen bei x=${x}`);
+          console.log(`  Rahmen-Methode (Fallback): ${runs.length} Boxen bei x=${x}`);
           return runs;
         }
       }
