@@ -9,6 +9,9 @@ export default defineConfig({
   server: {
     warmup: {
       clientFiles: ['./src/main.jsx', './src/App.jsx']
+    },
+    watch: {
+      ignored: ['**/vite.config.js']
     }
   }
 })

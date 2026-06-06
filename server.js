@@ -2,8 +2,6 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
-const { spawn } = require("child_process");
-const path = require("path");
 const { pruefungAuswerten, DEFAULT_NOTENSCHLUESSEL } = require("./logik");
 
 const app = express();
@@ -12,25 +10,125 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
-// ─── EasyOCR Python-Server ────────────────────────────────
-let ocrBereit = false;
-const ocrProc = spawn("python3", [path.join(__dirname, "ocr_server.py")]);
-ocrProc.stdout.on("data", d => {
-  const msg = d.toString();
-  process.stdout.write("[OCR] " + msg);
-  if (msg.includes("bereit")) ocrBereit = true;
-});
-ocrProc.stderr.on("data", d => process.stderr.write("[OCR] " + d.toString()));
-ocrProc.on("exit", code => console.log(`[OCR] Python-Prozess beendet (${code})`));
-process.on("exit", () => ocrProc.kill());
+// ─── MNIST: handgeschriebene Ziffern erkennen ────────────
+const path = require("path");
+let _ortSession = null;
 
-async function easyOcr(pfade) {
-  const resp = await fetch("http://127.0.0.1:3001", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(pfade),
-  });
-  return resp.json();
+function holeMnistSession() {
+  if (_ortSession) return Promise.resolve(_ortSession);
+  return (async () => {
+    const ort = require("onnxruntime-node");
+    _ortSession = await ort.InferenceSession.create(
+      path.join(__dirname, "mnist-12.onnx")
+    );
+    console.log("MNIST bereit");
+    return _ortSession;
+  })();
+}
+
+setImmediate(() => holeMnistSession().catch(e => console.error("MNIST load:", e.message)));
+
+// Otsu-Methode: optimalen Binärschwellwert aus Histogramm berechnen
+function otsuSchwellwert(jimpImg) {
+  const { data } = jimpImg.bitmap;
+  const hist = new Array(256).fill(0);
+  const total = data.length / 4;
+  for (let i = 0; i < data.length; i += 4) hist[data[i]]++;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+  let sumB = 0, wB = 0, best = 0, threshold = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const between = wB * wF * ((sumB / wB) - ((sum - sumB) / wF)) ** 2;
+    if (between > best) { best = between; threshold = t; }
+  }
+  return threshold;
+}
+
+// Bounding-Box der hellen (Ziffer-)Pixel im bereits invertierten Bild
+function zifferBbox(binaryImg) {
+  const { data, width, height } = binaryImg.bitmap;
+  let minX = width, maxX = 0, minY = height, maxY = 0, found = false;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4] > 128) {
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        found = true;
+      }
+    }
+  }
+  return found ? { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 } : null;
+}
+
+async function erkennZiffer(jimpImg) {
+  const ort = require("onnxruntime-node");
+  const session = await holeMnistSession();
+
+  const grau = jimpImg.clone().greyscale();
+  const schwelle = otsuSchwellwert(grau);
+  let img = grau.threshold({ max: schwelle }).invert();
+
+  // Ziffer zentrieren: bounding box finden, quadratisch padden
+  const bbox = zifferBbox(img);
+  if (bbox && bbox.w > 2 && bbox.h > 2) {
+    const Jimp = require("jimp");
+    const pad = 4;
+    const cx = Math.max(0, bbox.x - pad);
+    const cy = Math.max(0, bbox.y - pad);
+    const cw = Math.min(img.bitmap.width - cx, bbox.w + 2 * pad);
+    const ch = Math.min(img.bitmap.height - cy, bbox.h + 2 * pad);
+    img = img.crop(cx, cy, cw, ch);
+    const size = Math.max(cw, ch);
+    const canvas = new Jimp(size, size, 0x000000ff);
+    canvas.composite(img, Math.floor((size - cw) / 2), Math.floor((size - ch) / 2));
+    img = canvas;
+  }
+
+  img = img.resize(28, 28);
+  const { data } = img.bitmap;
+  const input = new Float32Array(28 * 28);
+  for (let i = 0; i < 28 * 28; i++) input[i] = data[i * 4] / 255;
+  const tensor = new ort.Tensor("float32", input, [1, 1, 28, 28]);
+  const out = await session.run({ [session.inputNames[0]]: tensor });
+  const scores = Array.from(out[session.outputNames[0]].data);
+  const maxS = Math.max(...scores);
+  const exps = scores.map(x => Math.exp(x - maxS));
+  const sum = exps.reduce((a, b) => a + b);
+  const probs = exps.map(x => x / sum);
+  const digit = probs.indexOf(Math.max(...probs));
+  return { digit, conf: probs[digit] };
+}
+
+function pixelDichte(jimpImg) {
+  const { data } = jimpImg.clone().greyscale().bitmap;
+  let dunkel = 0;
+  for (let i = 0; i < data.length; i += 4) if (data[i] < 128) dunkel++;
+  return dunkel / (data.length / 4);
+}
+
+async function erkennPunktzahl(boxImg) {
+  if (pixelDichte(boxImg) < 0.02) return null;
+  const W = boxImg.bitmap.width;
+  const H = boxImg.bitmap.height;
+  const halb = Math.floor(W / 2);
+  const links  = boxImg.clone().crop(0,    0, halb,     H);
+  const rechts = boxImg.clone().crop(halb, 0, W - halb, H);
+  const dL = pixelDichte(links);
+  const dR = pixelDichte(rechts);
+  if (dL > 0.04 && dR > 0.04) {
+    const l = await erkennZiffer(links);
+    const r = await erkennZiffer(rechts);
+    console.log(`    2-stellig: ${l.digit}(${l.conf.toFixed(2)}) ${r.digit}(${r.conf.toFixed(2)})`);
+    return l.digit * 10 + r.digit;
+  }
+  const { digit, conf } = await erkennZiffer(dR >= dL ? rechts : links);
+  console.log(`    1-stellig: ${digit}(${conf.toFixed(2)})`);
+  return digit;
 }
 
 // Hilfsfunktion: DB-Antwort parsen — auch bei leerem Body (z.B. 404 ohne JSON)
@@ -43,6 +141,15 @@ async function parseDbResponse(response) {
 const DB_URL = "https://punktescanneriii.onrender.com/api";
 
 // ─── HEALTHCHECKS ────────────────────────────────────────
+app.get("/api/health/ocr", async (_req, res) => {
+  try {
+    const session = await holeMnistSession();
+    res.json({ status: "ok", inputs: session.inputNames, outputs: session.outputNames });
+  } catch (err) {
+    res.status(500).json({ status: "error", message: err.message, cause: err.cause?.message ?? null, stack: err.stack?.split("\n").slice(0, 5) });
+  }
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "punkte-scanner-api" });
 });
@@ -302,8 +409,51 @@ app.post("/api/pruefungen/batch", async (req, res) => {
   res.json({ ergebnisse, fehler });
 });
 
+// ─── Bild-Ausrichtung via Eckmarker ───────────────────────
+// Alle 4 Eckmarker werden gesucht. Winkel wird aus oben + unten gemittelt
+// für robustere Korrektur bei Handyfoto-Perspektive.
+function ausrichten(bild, Jimp) {
+  const W = bild.bitmap.width;
+  const R = Math.round(160 * W / 1440);
+
+  const thresh = bild.clone().greyscale().threshold({ max: 60 });
+  const { data, width, height } = thresh.bitmap;
+
+  function schwerpunkt(x0, x1, y0, y1) {
+    let sx = 0, sy = 0, n = 0;
+    for (let y = Math.max(0,y0); y < Math.min(height,y1); y++) {
+      for (let x = Math.max(0,x0); x < Math.min(width,x1); x++) {
+        if (data[(y * width + x) * 4] < 128) { sx += x; sy += y; n++; }
+      }
+    }
+    return n > 20 ? { x: sx / n, y: sy / n } : null;
+  }
+
+  const tl = schwerpunkt(0, R, 0, R);
+  const tr = schwerpunkt(W - R, W, 0, R);
+  const bl = schwerpunkt(0, R, height - R, height);
+  const br = schwerpunkt(W - R, W, height - R, height);
+
+  if (!tl || !tr) {
+    console.log("Eckmarker nicht gefunden – kein Winkel-Fix");
+    return bild;
+  }
+
+  const winkelOben  = Math.atan2(tr.y - tl.y, tr.x - tl.x) * 180 / Math.PI;
+  const winkelUnten = (bl && br) ? Math.atan2(br.y - bl.y, br.x - bl.x) * 180 / Math.PI : winkelOben;
+  const winkel = (winkelOben + winkelUnten) / 2;
+
+  console.log(`Eckmarker: TL=(${Math.round(tl.x)},${Math.round(tl.y)}) TR=(${Math.round(tr.x)},${Math.round(tr.y)}) Winkel=${winkel.toFixed(2)}° (oben=${winkelOben.toFixed(2)}° unten=${winkelUnten.toFixed(2)}°)`);
+
+  if (Math.abs(winkel) > 0.3) {
+    bild.rotate(-winkel);
+  }
+  return bild;
+}
+
 // ─── ENDPUNKT 11 ──────────────────────────────────────────
 // OCR: Klausurseiten scannen → Matrikelnummer + Punkte extrahieren
+// MNIST-basiert: kein Tesseract, kein externer API-Aufruf
 app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
   if (!req.files || req.files.length === 0) {
     return res.status(400).json({ fehler: "Keine Dateien hochgeladen." });
@@ -311,178 +461,132 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
 
   try {
     const Jimp = require("jimp");
-    const { createWorker } = require("tesseract.js");
 
-    const langPath = __dirname;
+    // Scannt eine vertikale Spalte und gibt alle dunklen Pixel-Runs zurück
+    function scanSpalte(data, width, height, scanX, minH, maxH) {
+      const dunkel = [];
+      for (let y = 0; y < height; y++) {
+        if (data[(y * width + scanX) * 4] < 100) dunkel.push(y);
+      }
+      if (dunkel.length === 0) return [];
+      const runs = [];
+      let start = dunkel[0], prev = dunkel[0];
+      for (let i = 1; i < dunkel.length; i++) {
+        if (dunkel[i] - prev > 4) {
+          const h = prev - start;
+          if (h >= minH && h <= maxH) runs.push({ y0: start, y1: prev });
+          start = dunkel[i];
+        }
+        prev = dunkel[i];
+      }
+      const h = prev - start;
+      if (h >= minH && h <= maxH) runs.push({ y0: start, y1: prev });
+      return runs;
+    }
 
-    // Tesseract für Anker-Erkennung + Matrikelnummer
-    const workerVoll    = await createWorker("deu", 1, { langPath, cachePath: langPath });
-    const workerZiffern = await createWorker("eng", 1, { langPath, cachePath: langPath });
-    await workerZiffern.setParameters({ tessedit_pageseg_mode: "7" });
+    // Template-Koordinaten bei 1440px Breite (1 CSS px = 1.814 scan px, 1mm = 6.857 scan px)
+    const TW         = 1440;
+    const OCR_L      = 1190;  // linke Kante ocrdigit (berechnet: 1189px)
+    const OCR_W      = 109;   // Breite ocrdigit (60 CSS px × 1.814)
+    const OCR_H      = 91;    // Höhe ocrdigit (50 CSS px × 1.814)
+    const INSET      = 10;    // Einzug vom Boxrahmen
+    const MAT_BOX_X0 = 918;   // scan-X linke Kante erste Matrikelbox
+    const MAT_BOX_W  = 54;    // Breite (30 CSS px × 1.814)
+    const MAT_BOX_H  = 65;    // Höhe (36 CSS px × 1.814)
+    const MAT_BOX_DX = 60;    // Abstand Box-zu-Box (33 CSS px × 1.814)
+    const MAT_BOX_Y0 = 225;   // Y-Mitte der Matrikelboxen im Header
 
-    async function zuBuffer(jimpBild) {
-      return jimpBild.getBufferAsync(Jimp.MIME_PNG);
+    function findeBoxPositionen(bild) {
+      const thresh = bild.clone().threshold({ max: 80 });
+      const { width, height, data } = thresh.bitmap;
+
+      // Primär: linker schwarzer Balken von .apkt (4px solid #000)
+      // Liegt rechnerisch bei x≈1142, Scanner-Offset ±40px → Bereich 1100–1180
+      // Höhe = Task-Header-Höhe: min ~60, max ~300 scan px
+      for (let x = 1100; x <= 1180; x += 4) {
+        const runs = scanSpalte(data, width, height, x, 60, 300);
+        if (runs.length >= 2) {
+          console.log(`  Balken-Methode: ${runs.length} Aufgaben bei x=${x}`);
+          return runs.map(r => ({ y0: r.y0, y1: r.y0 + OCR_H }));
+        }
+      }
+
+      // Fallback: Boxrahmen-Scan
+      for (let x = 1180; x <= 1220; x += 3) {
+        const runs = scanSpalte(data, width, height, x, 70, 110);
+        if (runs.length >= 1) {
+          console.log(`  Rahmen-Methode (Fallback): ${runs.length} Boxen bei x=${x}`);
+          return runs;
+        }
+      }
+
+      console.log("  Keine Boxen gefunden");
+      return [];
     }
 
     let matrikelnummer = null;
     const aufgaben = [];
+    let aufgabeCounter = 0;  // globaler Zähler über alle Seiten
 
     for (const datei of req.files) {
-      const original = await Jimp.read(datei.buffer);
-      const { width, height } = original.bitmap;
-      console.log(`Bildgröße: ${width}x${height}`);
+      const eingelesen = await Jimp.read(datei.buffer);
+      console.log(`Originalgröße: ${eingelesen.bitmap.width}x${eingelesen.bitmap.height}`);
 
-      // Vorverarbeitung für Anker-Erkennung: Graustufen + Kontrast
-      const fuerAnker = original.clone()
-        .greyscale()
-        .normalize()
-        .contrast(0.3);
+      const original = ausrichten(eingelesen, Jimp).resize(TW, Jimp.AUTO);
+      const { width: W, height: H } = original.bitmap;
+      console.log(`Normalisiert: ${W}x${H}`);
 
-      // Vorverarbeitung für Crops: Graustufen + stärkerer Kontrast
-      const fuerCrops = original.clone()
-        .greyscale()
-        .normalize()
-        .contrast(0.5);
+      const fuerCrops = original.clone().greyscale().normalize().contrast(0.5);
 
-      // Vollseiten-OCR mit Bounding-Boxes
-      const { data } = await workerVoll.recognize(await zuBuffer(fuerAnker));
-
-      // Wörter aus hierarchischer Struktur extrahieren
-      const alleWoerter = (data.blocks ?? []).flatMap(b =>
-        (b.paragraphs ?? []).flatMap(p =>
-          (p.lines ?? []).flatMap(l => l.words ?? [])
-        )
-      );
-      const woerter = (alleWoerter.length ? alleWoerter : data.words ?? [])
-        .filter(w => w.bbox);
-
-      // Zeilenebene als Fallback für Anker mit Bounding Boxes
-      const zeilen = (data.blocks ?? []).flatMap(b =>
-        (b.paragraphs ?? []).flatMap(p => p.lines ?? [])
-      ).filter(l => l.bbox);
-
-      console.log(`=== Seite: ${woerter.length} Wörter, ${zeilen.length} Zeilen ===`);
-      woerter.filter(w => w.confidence > 40).forEach(w =>
-        console.log(`"${w.text}" conf=${Math.round(w.confidence)} bbox=${JSON.stringify(w.bbox)}`)
-      );
-
-      // ── Matrikelnummer ──
+      // ── 1. Matrikelnummer: 8 einzelne MNIST-Boxen ──────────────────────
       if (!matrikelnummer) {
-        const matrikelAnker =
-          woerter.find(w => /matrikel/i.test(w.text)) ??
-          zeilen.find(l => /matrikel/i.test(l.text));
-        if (matrikelAnker) {
-          const { x0, y0, x1, y1 } = matrikelAnker.bbox;
-          // Student schreibt rechts neben "Matrikel:" auf die Linie → rechts croppen
-          const cropLeft   = Math.min(x1 + 4, width - 10);
-          const cropTop    = Math.max(0, y0 - 4);
-          const cropWidth  = Math.min(260, width - cropLeft);
-          const cropHeight = Math.min(y1 - y0 + 14, height - cropTop);
-
-          const matrikelCrop = fuerCrops.clone()
-            .crop(cropLeft, cropTop, cropWidth, cropHeight)
-            .scale(4)
-            .threshold({ max: 140 });
-          matrikelCrop.write("/tmp/crop_matrikel.png");
-
-          const { data: md } = await workerZiffern.recognize(await zuBuffer(matrikelCrop));
-          const normMd = md.text
-            .replace(/[OoQDd]/g, "0").replace(/[IiLl]/g, "1")
-            .replace(/[Ss]/g, "5").replace(/[Bb]/g, "8")
-            .replace(/[Zz]/g, "2").replace(/[Gg]/g, "9");
-          const ziffern = normMd.replace(/[^0-9]/g, "");
-          if (ziffern.length >= 7) matrikelnummer = ziffern.slice(0, 8);
+        const ziffern = [];
+        for (let k = 0; k < 8; k++) {
+          const bx = MAT_BOX_X0 + k * MAT_BOX_DX;
+          const by = Math.max(0, MAT_BOX_Y0 - Math.floor(MAT_BOX_H / 2));
+          const bw = Math.min(MAT_BOX_W, W - bx);
+          const bh = Math.min(MAT_BOX_H, H - by);
+          if (bw <= 0 || bh <= 0) { ziffern.push(null); continue; }
+          const box = fuerCrops.clone().crop(bx, by, bw, bh);
+          const ziffer = await erkennZiffer(box);
+          console.log(`  Matrikel[${k}]: ${ziffer.digit} (conf=${ziffer.conf.toFixed(2)})`);
+          ziffern.push(ziffer.conf > 0.5 ? ziffer.digit : null);
         }
-
-        // Fallback: erste 7-8-stellige Zahl im Volltext (mit OCR-Zeichenkorrektur)
-        if (!matrikelnummer) {
-          const normVoll = (data.text ?? "")
-            .replace(/S/g, "5").replace(/s/g, "5")
-            .replace(/O/g, "0").replace(/o/g, "0")
-            .replace(/I/g, "1").replace(/l/g, "1")
-            .replace(/Z/g, "2").replace(/B/g, "8");
-          const fb = normVoll.match(/\b(\d{7,8})\b/);
-          if (fb) matrikelnummer = fb[1];
-        }
+        matrikelnummer = ziffern.map(z => z !== null ? String(z) : "?").join("");
+        console.log(`Matrikelnummer: ${matrikelnummer}`);
       }
 
-      // ── Punkte aus den Aufgaben-Feldern ──
-      // Suche "A{n} ERREICHT" Zeilen — Aufgabennummer steht direkt davor
-      const erreichtZeilen = zeilen
-        .filter(l => /ERREICHT/i.test(l.text))
-        .sort((a, b) => a.bbox.y0 - b.bbox.y0);
+      // ── 2. Aufgaben-Boxen per Pixel-Analyse finden ───────────────────
+      const boxPositionen = findeBoxPositionen(fuerCrops);
+      console.log(`Ziffernboxen gefunden: ${boxPositionen.length}`);
 
-      // Fallback: einzelne ERREICHT-Wörter ohne Nummer
-      const erreichtWoerter = woerter
-        .filter(w => /^ERREICHT[:]?$/i.test(w.text))
-        .sort((a, b) => a.bbox.y0 - b.bbox.y0);
+      // ── 3. Jede Box einzeln per MNIST erkennen ───────────────────────
+      for (let i = 0; i < boxPositionen.length; i++) {
+        aufgabeCounter++;
+        const { y0: boxTop, y1: boxBottom } = boxPositionen[i];
+        const cropT  = Math.max(0, boxTop + INSET);
+        const cropCH = Math.max(10, Math.min(boxBottom - boxTop - 2 * INSET, H - cropT));
+        const cropL2 = Math.max(0, OCR_L + INSET);
+        const cropCW = Math.max(10, OCR_W - 2 * INSET);
+        console.log(`  A${aufgabeCounter}: boxTop=${boxTop} cropT=${cropT} cropH=${cropCH}`);
 
-      const erreichtLabels = erreichtZeilen.length ? erreichtZeilen : erreichtWoerter;
-      console.log(`ERREICHT-Anker: ${erreichtLabels.length} (${erreichtZeilen.length} Zeilen, ${erreichtWoerter.length} Wörter)`);
-
-      for (const label of erreichtLabels) {
-        // Aufgabennummer aus "A3 ERREICHT" extrahieren (5/S und 2/Z Verwechslungen korrigieren)
-        const normText = (label.text ?? "").replace(/S/g, "5").replace(/Z/g, "2").replace(/O/g, "0").replace(/I/g, "1").replace(/l/g, "1");
-        const numMatch = normText.match(/A(\d+)\s*ERREICHT/i);
-        const aufgabeNr = numMatch ? parseInt(numMatch[1]) : (aufgaben.length + 1);
-        console.log(`  → Aufgabe ${aufgabeNr} erkannt aus: "${label.text}"`);
-
-        const feldLeft   = Math.max(0, label.bbox.x0 - 5);
-        const feldTop    = Math.min(height - 1, label.bbox.y1 + 6);
-        const feldWidth  = Math.min(200, width - feldLeft);
-        const feldHeight = Math.min(100, height - feldTop);
-
-        console.log(`  Aufgabe ${aufgabeNr}: crop L=${feldLeft} T=${feldTop} W=${feldWidth} H=${feldHeight}`);
-
-        if (feldWidth <= 0 || feldHeight <= 0) continue;
-
-        // Zwei Ziffernboxen per EasyOCR erkennen
-        const labelMitte = Math.round((label.bbox.x0 + label.bbox.x1) / 2);
-        const BOX_W = 69;
-        const GAP_W = 9;
-        const ocrLinks = Math.max(0, labelMitte - BOX_W - Math.round(GAP_W / 2));
-        const boxHoehe = Math.min(100, height - feldTop);
-
-        const b1Pfad = `/tmp/crop_A${aufgabeNr}_b1.png`;
-        const b2Pfad = `/tmp/crop_A${aufgabeNr}_b2.png`;
-        // 5px Rand-Inset um den Kastenrahmen rauszuschneiden, dann 3x hochskalieren + Schwellwert
-        const INSET = 5;
-        const innerW = Math.max(10, BOX_W - INSET * 2);
-        const innerH = Math.max(10, boxHoehe - INSET * 2);
-        fuerCrops.clone().crop(ocrLinks + INSET, feldTop + INSET, innerW, innerH)
-          .scale(3).threshold({ max: 140 }).write(b1Pfad);
-        fuerCrops.clone().crop(ocrLinks + BOX_W + GAP_W + INSET, feldTop + INSET, innerW, innerH)
-          .scale(3).threshold({ max: 140 }).write(b2Pfad);
-
-        const ocrRes = await easyOcr({ b1: b1Pfad, b2: b2Pfad });
-        const d1 = ocrRes.b1?.d ?? "";
-        const d2 = ocrRes.b2?.d ?? "";
-        console.log(`  A${aufgabeNr}: box1="${d1}"(${ocrRes.b1?.c}) box2="${d2}"(${ocrRes.b2?.c})`);
-
-        const roh = (d1 + d2).replace(/[^0-9]/g, "");
-        const punkte = parseFloat(roh);
-
-        // Duplikate überspringen — gleiche aufgabeNr bereits vorhanden
-        if (aufgaben.some(a => a.aufgabeNr === aufgabeNr)) {
-          console.log(`  Aufgabe ${aufgabeNr} übersprungen (Duplikat)`);
-          continue;
-        }
-
-        aufgaben.push({
-          aufgabeNr,
-          bezeichnung: `Aufgabe ${aufgabeNr}`,
-          erreichterPunkte: isNaN(punkte) ? null : Math.round(punkte * 10) / 10,
-        });
+        const boxImg = fuerCrops.clone().crop(cropL2, cropT, cropCW, cropCH);
+        const punkte = await erkennPunktzahl(boxImg);
+        console.log(`  A${aufgabeCounter}: → ${punkte}`);
+        aufgaben.push({ aufgabeNr: aufgabeCounter, bezeichnung: `Aufgabe ${aufgabeCounter}`, erreichterPunkte: punkte });
       }
     }
-
-    await workerVoll.terminate();
-    await workerZiffern.terminate();
 
     aufgaben.sort((a, b) => a.aufgabeNr - b.aufgabeNr);
     res.json({ matrikelnummer, aufgaben });
   } catch (err) {
-    res.status(500).json({ fehler: "OCR-Fehler: " + err.message });
+    console.error("OCR-Fehler stack:", err.stack);
+    console.error("OCR-Fehler cause:", err.cause);
+    res.status(500).json({
+      fehler: "OCR-Fehler: " + err.message,
+      cause: err.cause?.message ?? err.cause ?? null,
+      stack: err.stack?.split("\n").slice(0, 5),
+    });
   }
 });
 
