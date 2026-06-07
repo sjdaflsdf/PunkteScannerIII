@@ -8,6 +8,20 @@ const NOTENSKALA = [
   { min: 50, note: 4.0 }, { min: 0,  note: 5.0 },
 ];
 
+const DEFAULT_NOTENSCHLUESSEL_ANZEIGE = [
+  { note: "1,0", schwelle: 95, color: "#4CAF50" },
+  { note: "1,3", schwelle: 90, color: "#4CAF50" },
+  { note: "1,7", schwelle: 85, color: "#66BB6A" },
+  { note: "2,0", schwelle: 80, color: "#8BC34A" },
+  { note: "2,3", schwelle: 75, color: "#8BC34A" },
+  { note: "2,7", schwelle: 70, color: "#AED581" },
+  { note: "3,0", schwelle: 65, color: "#FF9800" },
+  { note: "3,3", schwelle: 60, color: "#FF9800" },
+  { note: "3,7", schwelle: 55, color: "#FFA726" },
+  { note: "4,0", schwelle: 50, color: "#F44336" },
+  { note: "5,0", schwelle: 0,  color: "#B71C1C" },
+];
+
 function berechneNote(punkte, maxPunkte) {
   if (!maxPunkte) return 5.0;
   const pct = (punkte / maxPunkte) * 100;
@@ -42,6 +56,9 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
   }, [initialPruefung.id]);
 
   const maxGesamt = pruefung.aufgaben.reduce((s, a) => s + a.maxPunkte, 0);
+  const anzeigeSchluessel = (!pruefung.istStandardNotenschluessel && pruefung.notenschluessel)
+    ? pruefung.notenschluessel
+    : DEFAULT_NOTENSCHLUESSEL_ANZEIGE;
 
   function update(updated) {
     speichereLokalePruefung(updated);
@@ -377,6 +394,34 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
           </table>
         </div>
       )}
+
+      {/* Notenschlüssel */}
+      <div style={card}>
+        <h2 style={sectionLabel}>Notenschlüssel</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: "6px" }}>
+          {anzeigeSchluessel.map((item, i) => {
+            const minPunkte = item.schwelle > 0 ? Math.ceil(item.schwelle / 100 * maxGesamt) : null;
+            const prevMinPunkte = i > 0 ? Math.ceil(anzeigeSchluessel[i - 1].schwelle / 100 * maxGesamt) : null;
+            return (
+              <div key={item.note} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 10px", borderRadius: "7px", backgroundColor: "#fafafa", border: "1px solid #f0f0f0" }}>
+                <span style={{ backgroundColor: item.color, color: "white", padding: "2px 8px", borderRadius: "4px", fontSize: "0.78rem", fontWeight: "700", minWidth: "34px", textAlign: "center", flexShrink: 0 }}>
+                  {item.note}
+                </span>
+                <span style={{ fontSize: "0.8rem", color: "#666", flex: 1 }}>
+                  {item.schwelle > 0
+                    ? `ab ${item.schwelle}%`
+                    : `unter ${anzeigeSchluessel[i - 1]?.schwelle ?? 50}%`}
+                </span>
+                <span style={{ fontSize: "0.78rem", color: "#aaa", whiteSpace: "nowrap" }}>
+                  {item.schwelle > 0
+                    ? `≥ ${minPunkte} Pkt.`
+                    : `< ${prevMinPunkte} Pkt.`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Aufgabenübersicht */}
       <div style={card}>
