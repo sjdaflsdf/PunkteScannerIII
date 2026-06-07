@@ -19,3 +19,5 @@ build/
 
 # Lokale Test-Hilfsmittel
 test-scanner.html
+# SQLite Lernfunktion (wird lokal/auf Server generiert)
+ziffer_samples.db
