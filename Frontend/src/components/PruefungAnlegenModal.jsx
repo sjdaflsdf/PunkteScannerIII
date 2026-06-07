@@ -193,8 +193,8 @@ thead.rh td{padding-bottom:12px}
 .sline{height:24px;border-bottom:1.5px solid #222}
 
 /* ── Aufgabe ── */
-.aufgabe{break-inside:avoid;page-break-inside:avoid;margin-bottom:10px}
-.ah{display:flex;align-items:stretch;border:1.5px solid #c8d8d2;border-radius:4px 4px 0 0;overflow:hidden;background:#f6faf8}
+.aufgabe{margin-bottom:10px}
+.ah{display:flex;align-items:stretch;border:1.5px solid #c8d8d2;border-radius:4px 4px 0 0;overflow:hidden;background:#f6faf8;break-inside:avoid;page-break-inside:avoid}
 .anr{background:#2d5a4b;color:white;font-weight:700;font-size:11pt;min-width:38px;display:flex;align-items:center;justify-content:center;padding:8px;flex-shrink:0}
 .atext{flex:1;padding:9px 12px;font-size:10pt;line-height:1.5;word-wrap:break-word}
 .apkt{border-left:4px solid #000;width:96px;flex-shrink:0;padding:6px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
@@ -546,13 +546,14 @@ thead.rh td{padding-bottom:12px}
 
                   {/* ── Eine Aufgabe pro Zeile ── */}
                   {aufgaben.map((aufgabe, i) => (
-                    <tr key={i} style={{ pageBreakInside: "avoid", breakInside: "avoid" }}>
+                    <tr key={i}>
                       <td style={{ paddingBottom: "14px" }}>
                         {/* Aufgaben-Header */}
                         <div style={{
                           display: "flex", alignItems: "stretch",
                           border: "1.5px solid #c8d8d2", borderRadius: "5px 5px 0 0",
                           overflow: "hidden", backgroundColor: "#f6faf8",
+                          pageBreakInside: "avoid", breakInside: "avoid",
                         }}>
                           <div style={{
                             backgroundColor: "#2d5a4b", color: "white",
