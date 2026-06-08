@@ -1,17 +1,25 @@
 import { useState, useEffect } from "react";
 import { useBreakpoint } from "../hooks/useBreakpoint";
 
-const NOTENSKALA = [
-  { min: 95, note: 1.0 }, { min: 90, note: 1.3 }, { min: 85, note: 1.7 },
-  { min: 80, note: 2.0 }, { min: 75, note: 2.3 }, { min: 70, note: 2.7 },
-  { min: 65, note: 3.0 }, { min: 60, note: 3.3 }, { min: 55, note: 3.7 },
-  { min: 50, note: 4.0 }, { min: 0,  note: 5.0 },
+const DEFAULT_NOTENSCHLUESSEL_ANZEIGE = [
+  { note: "1,0", schwelle: 95, color: "#4CAF50" },
+  { note: "1,3", schwelle: 90, color: "#4CAF50" },
+  { note: "1,7", schwelle: 85, color: "#66BB6A" },
+  { note: "2,0", schwelle: 80, color: "#8BC34A" },
+  { note: "2,3", schwelle: 75, color: "#8BC34A" },
+  { note: "2,7", schwelle: 70, color: "#AED581" },
+  { note: "3,0", schwelle: 65, color: "#FF9800" },
+  { note: "3,3", schwelle: 60, color: "#FF9800" },
+  { note: "3,7", schwelle: 55, color: "#FFA726" },
+  { note: "4,0", schwelle: 50, color: "#F44336" },
+  { note: "5,0", schwelle: 0,  color: "#B71C1C" },
 ];
 
-function berechneNote(punkte, maxPunkte) {
+function berechneNote(punkte, maxPunkte, schluessel) {
   if (!maxPunkte) return 5.0;
   const pct = (punkte / maxPunkte) * 100;
-  return (NOTENSKALA.find((s) => pct >= s.min) ?? { note: 5.0 }).note;
+  const eintrag = schluessel.find((s) => pct >= s.schwelle);
+  return eintrag ? Number(eintrag.note.replace(",", ".")) : 5.0;
 }
 
 function ladeLokalePruefung(id) {
@@ -35,6 +43,8 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
   const [editId, setEditId] = useState(null);
   const [editPunkte, setEditPunkte] = useState([]);
   const [matrikelFehler, setMatrikelFehler] = useState(null);
+  const [bearbeiteNotenschluessel, setBearbeiteNotenschluessel] = useState(false);
+  const [editSchluessel, setEditSchluessel] = useState(null);
 
   useEffect(() => {
     const fresh = ladeLokalePruefung(initialPruefung.id);
@@ -42,6 +52,9 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
   }, [initialPruefung.id]);
 
   const maxGesamt = pruefung.aufgaben.reduce((s, a) => s + a.maxPunkte, 0);
+  const anzeigeSchluessel = (!pruefung.istStandardNotenschluessel && pruefung.notenschluessel)
+    ? pruefung.notenschluessel
+    : DEFAULT_NOTENSCHLUESSEL_ANZEIGE;
 
   function update(updated) {
     speichereLokalePruefung(updated);
@@ -84,9 +97,15 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
     setEditId(null);
   }
 
+  function schluesselSpeichern() {
+    const updated = { ...pruefung, istStandardNotenschluessel: false, notenschluessel: editSchluessel };
+    update(updated);
+    setBearbeiteNotenschluessel(false);
+  }
+
   const ergebnisseMitNote = pruefung.ergebnisse.map((e) => {
     const gesamt = e.punkte.reduce((s, p) => s + p, 0);
-    return { ...e, gesamt, note: berechneNote(gesamt, maxGesamt) };
+    return { ...e, gesamt, note: berechneNote(gesamt, maxGesamt, anzeigeSchluessel) };
   });
 
   const bestanden = ergebnisseMitNote.filter((e) => e.note <= 4.0).length;
@@ -377,6 +396,78 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
           </table>
         </div>
       )}
+
+      {/* Notenschlüssel */}
+      <div style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+          <h2 style={{ ...sectionLabel, margin: 0 }}>Notenschlüssel</h2>
+          {!bearbeiteNotenschluessel ? (
+            <button
+              onClick={() => { setEditSchluessel([...anzeigeSchluessel]); setBearbeiteNotenschluessel(true); }}
+              style={smallBtn}
+            >
+              Anpassen
+            </button>
+          ) : (
+            <div style={{ display: "flex", gap: "6px" }}>
+              <button onClick={schluesselSpeichern} style={smallBtnPrimary}>Speichern</button>
+              <button onClick={() => setBearbeiteNotenschluessel(false)} style={smallBtn}>Abbrechen</button>
+            </div>
+          )}
+        </div>
+
+        {bearbeiteNotenschluessel ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {editSchluessel.map((eintrag, i) => (
+              <div key={eintrag.note} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ backgroundColor: eintrag.color, color: "white", padding: "2px 8px", borderRadius: "4px", fontSize: "0.78rem", fontWeight: "700", minWidth: "34px", textAlign: "center", flexShrink: 0 }}>
+                  {eintrag.note}
+                </span>
+                {eintrag.note === "5,0" ? (
+                  <span style={{ fontSize: "0.82rem", color: "#aaa" }}>unter Bestehensgrenze (fest)</span>
+                ) : (
+                  <>
+                    <span style={{ fontSize: "0.82rem", color: "#666" }}>ab</span>
+                    <input
+                      type="number"
+                      value={eintrag.schwelle}
+                      onChange={(e) => setEditSchluessel((prev) => prev.map((n, j) => j === i ? { ...n, schwelle: Number(e.target.value) } : n))}
+                      min="1"
+                      max="100"
+                      style={{ ...numInput, width: "70px" }}
+                    />
+                    <span style={{ fontSize: "0.82rem", color: "#666" }}>%</span>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: "6px" }}>
+            {anzeigeSchluessel.map((item, i) => {
+              const minPunkte = item.schwelle > 0 ? Math.ceil(item.schwelle / 100 * maxGesamt) : null;
+              const prevMinPunkte = i > 0 ? Math.ceil(anzeigeSchluessel[i - 1].schwelle / 100 * maxGesamt) : null;
+              return (
+                <div key={item.note} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 10px", borderRadius: "7px", backgroundColor: "#fafafa", border: "1px solid #f0f0f0" }}>
+                  <span style={{ backgroundColor: item.color, color: "white", padding: "2px 8px", borderRadius: "4px", fontSize: "0.78rem", fontWeight: "700", minWidth: "34px", textAlign: "center", flexShrink: 0 }}>
+                    {item.note}
+                  </span>
+                  <span style={{ fontSize: "0.8rem", color: "#666", flex: 1 }}>
+                    {item.schwelle > 0
+                      ? `ab ${item.schwelle}%`
+                      : `unter ${anzeigeSchluessel[i - 1]?.schwelle ?? 50}%`}
+                  </span>
+                  <span style={{ fontSize: "0.78rem", color: "#aaa", whiteSpace: "nowrap" }}>
+                    {item.schwelle > 0
+                      ? `≥ ${minPunkte} Pkt.`
+                      : `< ${prevMinPunkte} Pkt.`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Aufgabenübersicht */}
       <div style={card}>

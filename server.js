@@ -93,6 +93,14 @@ async function erkennZiffer(jimpImg) {
   const { data } = img.bitmap;
   const input = new Float32Array(28 * 28);
   for (let i = 0; i < 28 * 28; i++) input[i] = data[i * 4] / 255;
+
+  // DB-Abgleich: bestätigte Korrekturen bevorzugen
+  const dbTreffer = zifferAusDbSuchen(input);
+  if (dbTreffer) {
+    console.log(`    DB-Treffer: ${dbTreffer.ziffer} (sim=${dbTreffer.sim.toFixed(3)})`);
+    return { digit: dbTreffer.ziffer, conf: dbTreffer.sim, sampleId: dbTreffer.id };
+  }
+
   const tensor = new ort.Tensor("float32", input, [1, 1, 28, 28]);
   const out = await session.run({ [session.inputNames[0]]: tensor });
   const scores = Array.from(out[session.outputNames[0]].data);
@@ -101,7 +109,10 @@ async function erkennZiffer(jimpImg) {
   const sum = exps.reduce((a, b) => a + b);
   const probs = exps.map(x => x / sum);
   const digit = probs.indexOf(Math.max(...probs));
-  return { digit, conf: probs[digit] };
+  const conf = probs[digit];
+
+  const sampleId = zifferInDbSpeichern(input, digit, conf);
+  return { digit, conf, sampleId };
 }
 
 function pixelDichte(jimpImg) {
@@ -112,7 +123,7 @@ function pixelDichte(jimpImg) {
 }
 
 async function erkennPunktzahl(boxImg) {
-  if (pixelDichte(boxImg) < 0.02) return null;
+  if (pixelDichte(boxImg) < 0.02) return { punkte: null, sampleIds: [] };
   const W = boxImg.bitmap.width;
   const H = boxImg.bitmap.height;
   const halb = Math.floor(W / 2);
@@ -124,12 +135,61 @@ async function erkennPunktzahl(boxImg) {
     const l = await erkennZiffer(links);
     const r = await erkennZiffer(rechts);
     console.log(`    2-stellig: ${l.digit}(${l.conf.toFixed(2)}) ${r.digit}(${r.conf.toFixed(2)})`);
-    return l.digit * 10 + r.digit;
+    return { punkte: l.digit * 10 + r.digit, sampleIds: [l.sampleId, r.sampleId].filter(Boolean) };
   }
-  const { digit, conf } = await erkennZiffer(dR >= dL ? rechts : links);
-  console.log(`    1-stellig: ${digit}(${conf.toFixed(2)})`);
-  return digit;
+  const res = await erkennZiffer(dR >= dL ? rechts : links);
+  console.log(`    1-stellig: ${res.digit}(${res.conf.toFixed(2)})`);
+  return { punkte: res.digit, sampleIds: res.sampleId ? [res.sampleId] : [] };
 }
+
+// ─── SQLite Lernfunktion ──────────────────────────────────
+const Database = require("better-sqlite3");
+const zifferDb = new Database(path.join(__dirname, "ziffer_samples.db"));
+zifferDb.exec(`
+  CREATE TABLE IF NOT EXISTS ziffer_samples (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    pixel_data  BLOB    NOT NULL,
+    mnist_digit INTEGER,
+    konfidenz   REAL,
+    korrigiert  INTEGER,
+    erstellt    INTEGER DEFAULT (strftime('%s','now'))
+  )
+`);
+
+function pixelAehnlichkeit(a, b) {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < 784; i++) {
+    dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i];
+  }
+  return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
+}
+
+function zifferAusDbSuchen(pixelData) {
+  const rows = zifferDb.prepare(
+    "SELECT id, pixel_data, korrigiert FROM ziffer_samples WHERE korrigiert IS NOT NULL"
+  ).all();
+  let best = null, bestSim = 0;
+  for (const row of rows) {
+    const sim = pixelAehnlichkeit(pixelData, new Float32Array(row.pixel_data.buffer));
+    if (sim > bestSim) { bestSim = sim; best = row; }
+  }
+  return bestSim > 0.97 ? { ziffer: best.korrigiert, sim: bestSim, id: best.id } : null;
+}
+
+function zifferInDbSpeichern(pixelData, mnistDigit, konfidenz) {
+  const buf = Buffer.from(pixelData.buffer);
+  return zifferDb.prepare(
+    "INSERT INTO ziffer_samples (pixel_data, mnist_digit, konfidenz) VALUES (?,?,?)"
+  ).run(buf, mnistDigit, konfidenz).lastInsertRowid;
+}
+
+// ─── ENDPUNKT: Ziffer-Korrektur speichern ─────────────────
+app.post("/api/ocr/korrektur", (req, res) => {
+  const { sampleId, ziffer } = req.body;
+  if (sampleId == null || ziffer == null) return res.status(400).json({ fehler: "sampleId und ziffer erforderlich" });
+  zifferDb.prepare("UPDATE ziffer_samples SET korrigiert = ? WHERE id = ?").run(Number(ziffer), Number(sampleId));
+  res.json({ ok: true });
+});
 
 // Hilfsfunktion: DB-Antwort parsen — auch bei leerem Body (z.B. 404 ohne JSON)
 async function parseDbResponse(response) {
@@ -571,9 +631,9 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
         console.log(`  A${aufgabeCounter}: boxTop=${boxTop} cropT=${cropT} cropH=${cropCH}`);
 
         const boxImg = fuerCrops.clone().crop(cropL2, cropT, cropCW, cropCH);
-        const punkte = await erkennPunktzahl(boxImg);
+        const { punkte, sampleIds: boxSampleIds } = await erkennPunktzahl(boxImg);
         console.log(`  A${aufgabeCounter}: → ${punkte}`);
-        aufgaben.push({ aufgabeNr: aufgabeCounter, bezeichnung: `Aufgabe ${aufgabeCounter}`, erreichterPunkte: punkte });
+        aufgaben.push({ aufgabeNr: aufgabeCounter, bezeichnung: `Aufgabe ${aufgabeCounter}`, erreichterPunkte: punkte, sampleIds: boxSampleIds ?? [] });
       }
     }
 

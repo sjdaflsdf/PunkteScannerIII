@@ -5,28 +5,19 @@ const LEERE_AUFGABE = { bezeichnung: "", maxPunkte: "", papierTyp: "liniert", ra
 
 const BEARBEITUNGSRAUM_HOEHEN = { klein: 100, mittel: 200, gross: 380 };
 
-const NOTEN_TEMPLATE = [
-  { note: "1,0", color: "#4CAF50" },
-  { note: "1,3", color: "#4CAF50" },
-  { note: "1,7", color: "#66BB6A" },
-  { note: "2,0", color: "#8BC34A" },
-  { note: "2,3", color: "#8BC34A" },
-  { note: "2,7", color: "#AED581" },
-  { note: "3,0", color: "#FF9800" },
-  { note: "3,3", color: "#FF9800" },
-  { note: "3,7", color: "#FFA726" },
-  { note: "4,0", color: "#F44336" },
+const DEFAULT_NOTENSCHLUESSEL = [
+  { note: "1,0", schwelle: 95, color: "#4CAF50" },
+  { note: "1,3", schwelle: 90, color: "#4CAF50" },
+  { note: "1,7", schwelle: 85, color: "#66BB6A" },
+  { note: "2,0", schwelle: 80, color: "#8BC34A" },
+  { note: "2,3", schwelle: 75, color: "#8BC34A" },
+  { note: "2,7", schwelle: 70, color: "#AED581" },
+  { note: "3,0", schwelle: 65, color: "#FF9800" },
+  { note: "3,3", schwelle: 60, color: "#FF9800" },
+  { note: "3,7", schwelle: 55, color: "#FFA726" },
+  { note: "4,0", schwelle: 50, color: "#F44336" },
+  { note: "5,0", schwelle: 0,  color: "#B71C1C" },
 ];
-
-function berechneNotenschluessel(bestandenAb) {
-  const rangePerGrade = (100 - bestandenAb) / NOTEN_TEMPLATE.length;
-  const schluessel = NOTEN_TEMPLATE.map((n, i) => ({
-    ...n,
-    schwelle: Math.round(bestandenAb + (NOTEN_TEMPLATE.length - 1 - i) * rangePerGrade),
-  }));
-  schluessel.push({ note: "5,0", schwelle: 0, color: "#B71C1C" });
-  return schluessel;
-}
 
 function BearbeitungsRaum({ typ, hoehe }) {
   const base = {
@@ -76,8 +67,14 @@ export default function PruefungAnlegenModal({ onClose, onAngelegt }) {
   const [fehler, setFehler] = useState(null);
   const [gespeichert, setGespeichert] = useState(null);
   const [istStandardNotenschluessel, setIstStandardNotenschluessel] = useState(true);
-  const [bestandenAb, setBestandenAb] = useState(50);
+  const [notenschluessel, setNotenschluessel] = useState(DEFAULT_NOTENSCHLUESSEL);
   const printRef = useRef(null);
+
+  function schwelleAendern(index, wert) {
+    setNotenschluessel((prev) =>
+      prev.map((n, i) => (i === index ? { ...n, schwelle: Number(wert) } : n))
+    );
+  }
 
   function aufgabeAendern(index, feld, wert) {
     setAufgaben((prev) =>
@@ -123,7 +120,7 @@ export default function PruefungAnlegenModal({ onClose, onAngelegt }) {
           maxPunkte: Number(a.maxPunkte),
         })),
         istStandardNotenschluessel,
-        notenschluessel: istStandardNotenschluessel ? null : berechneNotenschluessel(bestandenAb),
+        notenschluessel: istStandardNotenschluessel ? null : notenschluessel,
       });
       setGespeichert(result);
       setSchritt("template");
@@ -193,8 +190,8 @@ thead.rh td{padding-bottom:12px}
 .sline{height:24px;border-bottom:1.5px solid #222}
 
 /* ── Aufgabe ── */
-.aufgabe{break-inside:avoid;page-break-inside:avoid;margin-bottom:10px}
-.ah{display:flex;align-items:stretch;border:1.5px solid #c8d8d2;border-radius:4px 4px 0 0;overflow:hidden;background:#f6faf8}
+.aufgabe{margin-bottom:10px}
+.ah{display:flex;align-items:stretch;border:1.5px solid #c8d8d2;border-radius:4px 4px 0 0;overflow:hidden;background:#f6faf8;break-inside:avoid;page-break-inside:avoid}
 .anr{background:#2d5a4b;color:white;font-weight:700;font-size:11pt;min-width:38px;display:flex;align-items:center;justify-content:center;padding:8px;flex-shrink:0}
 .atext{flex:1;padding:9px 12px;font-size:10pt;line-height:1.5;word-wrap:break-word}
 .apkt{border-left:4px solid #000;width:96px;flex-shrink:0;padding:6px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
@@ -331,23 +328,41 @@ thead.rh td{padding-bottom:12px}
                     1,0 ab 95% · 4,0 ab 50% · 5,0 unter 50%
                   </p>
                 ) : (
-                  <div style={{ border: "1px solid #e0e0e0", borderRadius: "8px", padding: "12px 14px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ fontSize: "0.875rem", color: "#555" }}>Note 4,0 (bestanden) ab</span>
-                      <input
-                        type="number"
-                        min="1"
-                        max="99"
-                        value={bestandenAb}
-                        onChange={(e) => setBestandenAb(Number(e.target.value))}
-                        disabled={loading}
-                        style={{ ...inputStyle, width: "68px", textAlign: "center", padding: "6px 8px" }}
-                      />
-                      <span style={{ fontSize: "0.875rem", color: "#555" }}>%</span>
-                    </div>
-                    <p style={{ fontSize: "0.75rem", color: "#999", margin: "8px 0 0" }}>
-                      Die anderen Noten werden gleichmäßig verteilt · 1,0 ab {berechneNotenschluessel(bestandenAb)[0].schwelle}%
-                    </p>
+                  <div style={{ border: "1px solid #e0e0e0", borderRadius: "8px", padding: "12px 14px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {notenschluessel.map((eintrag, i) => (
+                      <div key={eintrag.note} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <span style={{
+                          backgroundColor: eintrag.color,
+                          color: "white",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          fontSize: "0.78rem",
+                          fontWeight: "700",
+                          minWidth: "34px",
+                          textAlign: "center",
+                          flexShrink: 0,
+                        }}>
+                          {eintrag.note}
+                        </span>
+                        {eintrag.note === "5,0" ? (
+                          <span style={{ fontSize: "0.82rem", color: "#aaa" }}>unter Bestehensgrenze (fest)</span>
+                        ) : (
+                          <>
+                            <span style={{ fontSize: "0.82rem", color: "#666" }}>ab</span>
+                            <input
+                              type="number"
+                              value={eintrag.schwelle}
+                              onChange={(e) => schwelleAendern(i, e.target.value)}
+                              min="1"
+                              max="100"
+                              disabled={loading}
+                              style={{ ...inputStyle, width: "70px", textAlign: "center", padding: "6px 8px" }}
+                            />
+                            <span style={{ fontSize: "0.82rem", color: "#666" }}>%</span>
+                          </>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -546,13 +561,14 @@ thead.rh td{padding-bottom:12px}
 
                   {/* ── Eine Aufgabe pro Zeile ── */}
                   {aufgaben.map((aufgabe, i) => (
-                    <tr key={i} style={{ pageBreakInside: "avoid", breakInside: "avoid" }}>
+                    <tr key={i}>
                       <td style={{ paddingBottom: "14px" }}>
                         {/* Aufgaben-Header */}
                         <div style={{
                           display: "flex", alignItems: "stretch",
                           border: "1.5px solid #c8d8d2", borderRadius: "5px 5px 0 0",
                           overflow: "hidden", backgroundColor: "#f6faf8",
+                          pageBreakInside: "avoid", breakInside: "avoid",
                         }}>
                           <div style={{
                             backgroundColor: "#2d5a4b", color: "white",

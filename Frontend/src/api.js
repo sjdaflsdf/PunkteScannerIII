@@ -68,6 +68,12 @@ export const api = {
       body: JSON.stringify({ matNr, name: name || undefined }),
     }),
 
+  ocrKorrektur: (sampleId, ziffer) =>
+    request("/api/ocr/korrektur", {
+      method: "POST",
+      body: JSON.stringify({ sampleId, ziffer }),
+    }),
+
   ocrScan: (pruefungId, dateien) => {
     const form = new FormData();
     form.append("pruefungId", String(pruefungId));

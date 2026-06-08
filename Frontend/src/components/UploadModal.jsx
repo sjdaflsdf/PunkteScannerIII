@@ -142,6 +142,16 @@ export default function UploadModal({ onClose, onErgebnis }) {
   }
 
   async function speichernUndAbschliessen(resolvedStudentId) {
+    // Korrekturen in SQLite-Lernfunktion speichern
+    for (const [i, aufgabe] of ocrErgebnis.aufgaben.entries()) {
+      const korrigiert = Number(erreichterPunkte[i]);
+      if (aufgabe.erreichterPunkte !== korrigiert && aufgabe.sampleIds?.length > 0) {
+        for (const sampleId of aufgabe.sampleIds) {
+          api.ocrKorrektur(sampleId, korrigiert).catch(() => {});
+        }
+      }
+    }
+
     const aufgaben = ocrErgebnis.aufgaben.map((aufgabe, i) => {
       const dbAufgabe = pruefungAufgaben.find(a => a.aufgabeNr === aufgabe.aufgabeNr) ?? pruefungAufgaben[i];
       return {
