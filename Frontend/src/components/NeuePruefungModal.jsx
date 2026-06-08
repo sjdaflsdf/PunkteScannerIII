@@ -1,6 +1,20 @@
 import { useState } from "react";
 import { api } from "../api";
 
+const DEFAULT_NOTENSCHLUESSEL = [
+  { note: "1,0", schwelle: 95, color: "#4CAF50" },
+  { note: "1,3", schwelle: 90, color: "#4CAF50" },
+  { note: "1,7", schwelle: 85, color: "#66BB6A" },
+  { note: "2,0", schwelle: 80, color: "#8BC34A" },
+  { note: "2,3", schwelle: 75, color: "#8BC34A" },
+  { note: "2,7", schwelle: 70, color: "#AED581" },
+  { note: "3,0", schwelle: 65, color: "#FF9800" },
+  { note: "3,3", schwelle: 60, color: "#FF9800" },
+  { note: "3,7", schwelle: 55, color: "#FFA726" },
+  { note: "4,0", schwelle: 50, color: "#F44336" },
+  { note: "5,0", schwelle: 0,  color: "#B71C1C" },
+];
+
 export default function NeuePruefungModal({ onClose, onErfolgreich }) {
   const [name, setName] = useState("");
   const [datum, setDatum] = useState("");
@@ -8,6 +22,14 @@ export default function NeuePruefungModal({ onClose, onErfolgreich }) {
   const [aufgaben, setAufgaben] = useState([{ maxPunkte: "" }]);
   const [loading, setLoading] = useState(false);
   const [fehler, setFehler] = useState(null);
+  const [zeigeNotenschluessel, setZeigeNotenschluessel] = useState(false);
+  const [notenschluessel, setNotenschluessel] = useState(DEFAULT_NOTENSCHLUESSEL);
+
+  function schwelleAendern(index, wert) {
+    setNotenschluessel((prev) =>
+      prev.map((n, i) => (i === index ? { ...n, schwelle: Number(wert) } : n))
+    );
+  }
 
   function aufgabeAendern(index, wert) {
     setAufgaben((prev) =>
@@ -59,6 +81,7 @@ export default function NeuePruefungModal({ onClose, onErfolgreich }) {
           aufgabeNr: i + 1,
           maxPunkte: Number(a.maxPunkte),
         })),
+        notenschluessel: zeigeNotenschluessel ? notenschluessel : undefined,
       });
       onErfolgreich();
     } catch (err) {
@@ -190,6 +213,70 @@ export default function NeuePruefungModal({ onClose, onErfolgreich }) {
             >
               + Aufgabe hinzufügen
             </button>
+          </div>
+
+          {/* Notenschlüssel anpassen */}
+          <div style={{ marginTop: "16px" }}>
+            <button
+              type="button"
+              onClick={() => setZeigeNotenschluessel((v) => !v)}
+              style={{
+                background: "none",
+                border: "1px solid #e0e0e0",
+                borderRadius: "8px",
+                padding: "8px 14px",
+                cursor: "pointer",
+                color: "#2d5a4b",
+                fontSize: "0.82rem",
+                width: "100%",
+                textAlign: "left",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span>Notenschlüssel anpassen</span>
+              <span>{zeigeNotenschluessel ? "▲" : "▼"}</span>
+            </button>
+
+            {zeigeNotenschluessel && (
+              <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                {notenschluessel.map((eintrag, i) => (
+                  <div key={eintrag.note} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <span style={{
+                      backgroundColor: eintrag.color,
+                      color: "white",
+                      padding: "2px 8px",
+                      borderRadius: "4px",
+                      fontSize: "0.78rem",
+                      fontWeight: "700",
+                      minWidth: "34px",
+                      textAlign: "center",
+                      flexShrink: 0,
+                    }}>
+                      {eintrag.note}
+                    </span>
+                    {eintrag.note === "5,0" ? (
+                      <span style={{ fontSize: "0.82rem", color: "#aaa" }}>unter Bestehensgrenze (fest)</span>
+                    ) : (
+                      <>
+                        <span style={{ fontSize: "0.82rem", color: "#666" }}>ab</span>
+                        <input
+                          type="number"
+                          value={eintrag.schwelle}
+                          onChange={(e) => schwelleAendern(i, e.target.value)}
+                          min="1"
+                          max="100"
+                          disabled={loading}
+                          style={{ ...inputStyle, width: "70px", textAlign: "center" }}
+                        />
+                        <span style={{ fontSize: "0.82rem", color: "#666" }}>%</span>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {fehler && (
