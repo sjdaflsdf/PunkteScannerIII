@@ -41,6 +41,15 @@ export const api = {
   getNotenschluessel: () =>
     request("/api/notenschluessel"),
 
+  getPruefungNotenschluessel: (pruefungId) =>
+    request(`/api/pruefungen/${pruefungId}/notenschluessel`),
+
+  savePruefungNotenschluessel: (pruefungId, schluessel) =>
+    request(`/api/pruefungen/${pruefungId}/notenschluessel`, {
+      method: "PUT",
+      body: JSON.stringify(schluessel),
+    }),
+
   auswerten: (data) =>
     request("/api/pruefung/auswerten", {
       method: "POST",

@@ -43,8 +43,8 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
   const [editId, setEditId] = useState(null);
   const [editPunkte, setEditPunkte] = useState([]);
   const [matrikelFehler, setMatrikelFehler] = useState(null);
-  const [bearbeiteNotenschluessel, setBearbeiteNotenschluessel] = useState(false);
   const [editSchluessel, setEditSchluessel] = useState(null);
+  const [schluesselGeaendert, setSchluesselGeaendert] = useState(false);
 
   useEffect(() => {
     const fresh = ladeLokalePruefung(initialPruefung.id);
@@ -97,10 +97,25 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
     setEditId(null);
   }
 
+  const aktiverSchluessel = editSchluessel ?? anzeigeSchluessel;
+
+  function schwelleAendern(i, neueSchwelle) {
+    const basis = editSchluessel ?? anzeigeSchluessel.map(n => ({ ...n }));
+    setEditSchluessel(basis.map((n, j) => j === i ? { ...n, schwelle: Number(neueSchwelle) } : n));
+    setSchluesselGeaendert(true);
+  }
+
+  function punkteAendern(i, neuePkte) {
+    const neueSchwelle = Math.min(100, Math.max(0, Math.round(Number(neuePkte) / maxGesamt * 100)));
+    const basis = editSchluessel ?? anzeigeSchluessel.map(n => ({ ...n }));
+    setEditSchluessel(basis.map((n, j) => j === i ? { ...n, schwelle: neueSchwelle } : n));
+    setSchluesselGeaendert(true);
+  }
+
   function schluesselSpeichern() {
-    const updated = { ...pruefung, istStandardNotenschluessel: false, notenschluessel: editSchluessel };
+    const updated = { ...pruefung, istStandardNotenschluessel: false, notenschluessel: aktiverSchluessel };
     update(updated);
-    setBearbeiteNotenschluessel(false);
+    setSchluesselGeaendert(false);
   }
 
   const ergebnisseMitNote = pruefung.ergebnisse.map((e) => {
@@ -401,72 +416,49 @@ export default function LokalePruefungDetail({ pruefung: initialPruefung, onZuru
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
           <h2 style={{ ...sectionLabel, margin: 0 }}>Notenschlüssel</h2>
-          {!bearbeiteNotenschluessel ? (
-            <button
-              onClick={() => { setEditSchluessel([...anzeigeSchluessel]); setBearbeiteNotenschluessel(true); }}
-              style={smallBtn}
-            >
-              Anpassen
-            </button>
-          ) : (
-            <div style={{ display: "flex", gap: "6px" }}>
-              <button onClick={schluesselSpeichern} style={smallBtnPrimary}>Speichern</button>
-              <button onClick={() => setBearbeiteNotenschluessel(false)} style={smallBtn}>Abbrechen</button>
-            </div>
+          {schluesselGeaendert && (
+            <button onClick={schluesselSpeichern} style={smallBtnPrimary}>Speichern</button>
           )}
         </div>
-
-        {bearbeiteNotenschluessel ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {editSchluessel.map((eintrag, i) => (
-              <div key={eintrag.note} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+          {aktiverSchluessel.map((eintrag, i) => {
+            const pkt = eintrag.schwelle > 0 ? Math.ceil(eintrag.schwelle / 100 * maxGesamt) : null;
+            const prevPkt = i > 0 ? Math.ceil(aktiverSchluessel[i - 1].schwelle / 100 * maxGesamt) : null;
+            return (
+              <div key={eintrag.note} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <span style={{ backgroundColor: eintrag.color, color: "white", padding: "2px 8px", borderRadius: "4px", fontSize: "0.78rem", fontWeight: "700", minWidth: "34px", textAlign: "center", flexShrink: 0 }}>
                   {eintrag.note}
                 </span>
                 {eintrag.note === "5,0" ? (
-                  <span style={{ fontSize: "0.82rem", color: "#aaa" }}>unter Bestehensgrenze (fest)</span>
+                  <>
+                    <span style={{ fontSize: "0.82rem", color: "#888" }}>unter {aktiverSchluessel[i - 1]?.schwelle ?? 50}%</span>
+                    <span style={{ fontSize: "0.78rem", color: "#bbb" }}>= &lt; {prevPkt} Pkt.</span>
+                  </>
                 ) : (
                   <>
                     <span style={{ fontSize: "0.82rem", color: "#666" }}>ab</span>
                     <input
-                      type="number"
+                      type="number" min="1" max="100"
                       value={eintrag.schwelle}
-                      onChange={(e) => setEditSchluessel((prev) => prev.map((n, j) => j === i ? { ...n, schwelle: Number(e.target.value) } : n))}
-                      min="1"
-                      max="100"
-                      style={{ ...numInput, width: "70px" }}
+                      onChange={(e) => schwelleAendern(i, e.target.value)}
+                      style={{ ...numInput, width: "62px" }}
                     />
                     <span style={{ fontSize: "0.82rem", color: "#666" }}>%</span>
+                    <span style={{ fontSize: "0.82rem", color: "#bbb", margin: "0 4px" }}>=</span>
+                    <span style={{ fontSize: "0.82rem", color: "#666" }}>≥</span>
+                    <input
+                      type="number" min="0" max={maxGesamt}
+                      value={pkt ?? 0}
+                      onChange={(e) => punkteAendern(i, e.target.value)}
+                      style={{ ...numInput, width: "62px" }}
+                    />
+                    <span style={{ fontSize: "0.82rem", color: "#666" }}>Pkt.</span>
                   </>
                 )}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: "6px" }}>
-            {anzeigeSchluessel.map((item, i) => {
-              const minPunkte = item.schwelle > 0 ? Math.ceil(item.schwelle / 100 * maxGesamt) : null;
-              const prevMinPunkte = i > 0 ? Math.ceil(anzeigeSchluessel[i - 1].schwelle / 100 * maxGesamt) : null;
-              return (
-                <div key={item.note} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 10px", borderRadius: "7px", backgroundColor: "#fafafa", border: "1px solid #f0f0f0" }}>
-                  <span style={{ backgroundColor: item.color, color: "white", padding: "2px 8px", borderRadius: "4px", fontSize: "0.78rem", fontWeight: "700", minWidth: "34px", textAlign: "center", flexShrink: 0 }}>
-                    {item.note}
-                  </span>
-                  <span style={{ fontSize: "0.8rem", color: "#666", flex: 1 }}>
-                    {item.schwelle > 0
-                      ? `ab ${item.schwelle}%`
-                      : `unter ${anzeigeSchluessel[i - 1]?.schwelle ?? 50}%`}
-                  </span>
-                  <span style={{ fontSize: "0.78rem", color: "#aaa", whiteSpace: "nowrap" }}>
-                    {item.schwelle > 0
-                      ? `≥ ${minPunkte} Pkt.`
-                      : `< ${prevMinPunkte} Pkt.`}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
+            );
+          })}
+        </div>
       </div>
 
       {/* Aufgabenübersicht */}
