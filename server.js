@@ -354,6 +354,23 @@ app.post("/api/pruefungen", async (req, res) => {
   }
 });
 
+// ─── Prüfung löschen ──────────────────────────────────────
+app.delete("/api/pruefungen/:id", async (req, res) => {
+  try {
+    const response = await fetch(`${DB_URL}/pruefungen/${req.params.id}`, {
+      method: "DELETE",
+    });
+    if (response.status === 204 || response.status === 200) {
+      res.status(204).end();
+    } else {
+      const data = await parseDbResponse(response);
+      res.status(response.status).json(data);
+    }
+  } catch (err) {
+    res.status(500).json({ fehler: "DB nicht erreichbar." });
+  }
+});
+
 // ─── ENDPUNKT 7 ───────────────────────────────────────────
 // Prüfung anlegen: erst Prüfung, dann Aufgaben einzeln
 app.post("/api/pruefungen/anlegen", async (req, res) => {

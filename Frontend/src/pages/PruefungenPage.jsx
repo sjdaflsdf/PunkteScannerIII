@@ -37,6 +37,16 @@ export default function PruefungenPage({ onNeuePruefung, onNeuePruefungLokal, on
     setLokalePruefungen(aktualisiert);
   }
 
+  async function onlinePruefungLoeschen(id, name) {
+    if (!window.confirm(`"${name}" wirklich löschen? Alle Ergebnisse gehen verloren.`)) return;
+    try {
+      await api.deletePruefung(id);
+      setPruefungen((prev) => prev.filter((p) => p.id !== id));
+    } catch (e) {
+      alert("Fehler beim Löschen: " + e.message);
+    }
+  }
+
   return (
     <div style={{ padding: isMobile ? "12px 14px" : "32px 36px" }}>
       {/* Header */}
@@ -105,9 +115,16 @@ export default function PruefungenPage({ onNeuePruefung, onNeuePruefungLokal, on
                   </p>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 }}>
-                  {p.lokal && (
+                  {p.lokal ? (
                     <button
                       onClick={(e) => { e.stopPropagation(); if (window.confirm(`"${p.name}" wirklich löschen?`)) lokalePruefungLoeschen(p.id); }}
+                      style={{ border: "none", background: "none", padding: "4px 5px", cursor: "pointer", fontSize: "1rem", color: "#e57373" }}
+                    >
+                      ×
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onlinePruefungLoeschen(p.id, p.name); }}
                       style={{ border: "none", background: "none", padding: "4px 5px", cursor: "pointer", fontSize: "1rem", color: "#e57373" }}
                     >
                       ×
@@ -142,9 +159,16 @@ export default function PruefungenPage({ onNeuePruefung, onNeuePruefungLokal, on
                   <button onClick={() => onPruefungOeffnen(p)} style={{ border: "1px solid #d8d8d8", background: "white", padding: "6px 14px", borderRadius: "6px", cursor: "pointer", fontSize: "0.82rem", color: "#444" }}>
                     Öffnen
                   </button>
-                  {p.lokal && (
+                  {p.lokal ? (
                     <button
                       onClick={() => { if (window.confirm(`"${p.name}" wirklich löschen?`)) lokalePruefungLoeschen(p.id); }}
+                      style={{ border: "1px solid #fcc", background: "white", padding: "6px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "0.82rem", color: "#e57373" }}
+                    >
+                      ×
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => onlinePruefungLoeschen(p.id, p.name)}
                       style={{ border: "1px solid #fcc", background: "white", padding: "6px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "0.82rem", color: "#e57373" }}
                     >
                       ×

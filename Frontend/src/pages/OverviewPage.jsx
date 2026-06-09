@@ -6,6 +6,22 @@ import ErgebnisseTabelle from "../components/ErgebnisseTabelle";
 import { API } from "../api";
 import { useBreakpoint } from "../hooks/useBreakpoint";
 
+const DEFAULT_NS = [
+  { note: "1,0", schwelle: 95 }, { note: "1,3", schwelle: 90 },
+  { note: "1,7", schwelle: 85 }, { note: "2,0", schwelle: 80 },
+  { note: "2,3", schwelle: 75 }, { note: "2,7", schwelle: 70 },
+  { note: "3,0", schwelle: 65 }, { note: "3,3", schwelle: 60 },
+  { note: "3,7", schwelle: 55 }, { note: "4,0", schwelle: 50 },
+  { note: "5,0", schwelle: 0 },
+];
+
+function berechneNote(punkte, maxPunkte, schluessel) {
+  if (!maxPunkte) return 5.0;
+  const pct = (punkte / maxPunkte) * 100;
+  const e = schluessel.find((s) => pct >= s.schwelle);
+  return e ? Number(e.note.replace(",", ".")) : 5.0;
+}
+
 const Chevron = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 18 15 12 9 6" />
@@ -19,7 +35,7 @@ function getStatusDot(status) {
   return { color: "#bdbdbd", label: "Entwurf" };
 }
 
-function PruefungItem({ pruefung, onPruefungOeffnen, onLoeschen, isMobile }) {
+function PruefungItem({ pruefung, onPruefungOeffnen, onLoeschen, onLoeschenOnline, isMobile }) {
   const dot = getStatusDot(pruefung.status);
   const datum = pruefung.datum
     ? new Date(pruefung.datum).toLocaleDateString("de-DE", { day: "numeric", month: isMobile ? "short" : "long", year: "numeric" })
@@ -57,14 +73,16 @@ function PruefungItem({ pruefung, onPruefungOeffnen, onLoeschen, isMobile }) {
           </p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-          {pruefung.lokal && (
-            <button
-              onClick={(e) => { e.stopPropagation(); if (window.confirm(`"${pruefung.name}" wirklich löschen?`)) onLoeschen(pruefung.id); }}
-              style={{ border: "none", background: "none", padding: "4px 6px", cursor: "pointer", fontSize: "1rem", color: "#e57373" }}
-            >
-              ×
-            </button>
-          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (pruefung.lokal) { if (window.confirm(`"${pruefung.name}" wirklich löschen?`)) onLoeschen(pruefung.id); }
+              else onLoeschenOnline(pruefung.id, pruefung.name);
+            }}
+            style={{ border: "none", background: "none", padding: "4px 6px", cursor: "pointer", fontSize: "1rem", color: "#e57373" }}
+          >
+            ×
+          </button>
           <Chevron />
         </div>
       </div>
@@ -103,14 +121,15 @@ function PruefungItem({ pruefung, onPruefungOeffnen, onLoeschen, isMobile }) {
         >
           Öffnen
         </button>
-        {pruefung.lokal && (
-          <button
-            onClick={() => { if (window.confirm(`"${pruefung.name}" wirklich löschen?`)) onLoeschen(pruefung.id); }}
-            style={{ border: "1px solid #fcc", background: "white", padding: "6px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "0.82rem", color: "#e57373" }}
-          >
-            ×
-          </button>
-        )}
+        <button
+          onClick={() => {
+            if (pruefung.lokal) { if (window.confirm(`"${pruefung.name}" wirklich löschen?`)) onLoeschen(pruefung.id); }
+            else onLoeschenOnline(pruefung.id, pruefung.name);
+          }}
+          style={{ border: "1px solid #fcc", background: "white", padding: "6px 10px", borderRadius: "6px", cursor: "pointer", fontSize: "0.82rem", color: "#e57373" }}
+        >
+          ×
+        </button>
       </div>
     </div>
   );
@@ -122,13 +141,28 @@ export default function OverviewPage({ onNeuePruefung, onNeuePruefungLokal, onAu
   const [lokalePruefungen, setLokalePruefungen] = useState([]);
   const [laden, setLaden] = useState(true);
   const [fehler, setFehler] = useState(null);
+  const [onlineErgebnisse, setOnlineErgebnisse] = useState([]);
 
   useEffect(() => {
     setLokalePruefungen(JSON.parse(localStorage.getItem("pruefungen_lokal") || "[]"));
     fetch(`${API}/api/pruefungen`)
       .then((r) => r.json())
-      .then((daten) => { setPruefungen(Array.isArray(daten) ? daten : []); setLaden(false); })
-      .catch(() => { setFehler("Server nicht erreichbar. Läuft node server.js?"); setLaden(false); });
+      .then((daten) => {
+        const liste = Array.isArray(daten) ? daten : [];
+        setPruefungen(liste);
+        setLaden(false);
+        if (liste.length > 0) {
+          Promise.all(
+            liste.map((p) =>
+              fetch(`${API}/api/pruefungen/${p.id}/ergebnisse`)
+                .then((r) => r.json())
+                .then((erg) => (Array.isArray(erg) ? erg.map((e) => ({ ...e, pruefungId: p.id })) : []))
+                .catch(() => [])
+            )
+          ).then((alle) => setOnlineErgebnisse(alle.flat()));
+        }
+      })
+      .catch(() => { setFehler("Server nicht erreichbar."); setLaden(false); });
   }, []);
 
   function lokalePruefungLoeschen(id) {
@@ -137,9 +171,53 @@ export default function OverviewPage({ onNeuePruefung, onNeuePruefungLokal, onAu
     setLokalePruefungen(aktualisiert);
   }
 
+  async function onlinePruefungLoeschen(id, name) {
+    if (!window.confirm(`"${name}" wirklich löschen? Alle Ergebnisse gehen verloren.`)) return;
+    try {
+      await fetch(`${API}/api/pruefungen/${id}`, { method: "DELETE" });
+      setPruefungen((prev) => prev.filter((p) => p.id !== id));
+      setOnlineErgebnisse((prev) => prev.filter((e) => e.pruefungId !== id));
+    } catch {
+      alert("Fehler beim Löschen.");
+    }
+  }
+
   const allePruefungen = [...pruefungen, ...lokalePruefungen];
   const anzahlPruefungen = allePruefungen.length;
   const offene = allePruefungen.filter((p) => (p.status ?? "").toLowerCase() !== "abgeschlossen").length;
+
+  const lokalStats = lokalePruefungen.reduce((acc, p) => {
+    const schluessel = (!p.istStandardNotenschluessel && p.notenschluessel) ? p.notenschluessel : DEFAULT_NS;
+    const maxGesamt = (p.aufgaben ?? []).reduce((s, a) => s + a.maxPunkte, 0);
+    (p.ergebnisse ?? []).forEach((e) => {
+      const gesamt = (e.punkte ?? []).reduce((s, pt) => s + pt, 0);
+      acc.total++;
+      if (berechneNote(gesamt, maxGesamt, schluessel) <= 4.0) acc.bestanden++;
+    });
+    return acc;
+  }, { total: 0, bestanden: 0 });
+
+  const onlineStats = onlineErgebnisse.reduce((acc, e) => {
+    acc.total++;
+    const note = parseFloat(String(e.note ?? "5").replace(",", "."));
+    if (note <= 4.0) acc.bestanden++;
+    return acc;
+  }, { total: 0, bestanden: 0 });
+
+  const gesamtTotal = lokalStats.total + onlineStats.total;
+  const gesamtBestanden = lokalStats.bestanden + onlineStats.bestanden;
+
+  const studierendeValue = anzahlPruefungen === 0 ? "–" : gesamtTotal > 0 ? gesamtTotal : "–";
+  const studierendeSub = anzahlPruefungen === 0
+    ? "noch keine Prüfungen"
+    : gesamtTotal > 0 ? `${gesamtBestanden} bestanden` : "noch keine Ergebnisse";
+
+  const bestehensquoteValue = gesamtTotal > 0
+    ? Math.round((gesamtBestanden / gesamtTotal) * 100) + " %"
+    : "–";
+  const bestehensquoteSub = gesamtTotal > 0
+    ? `aus ${allePruefungen.length} Prüfung(en)`
+    : anzahlPruefungen === 0 ? "noch keine Prüfungen" : "noch keine Ergebnisse";
 
   const p = isMobile ? "12px 14px" : "32px 36px";
 
@@ -180,9 +258,9 @@ export default function OverviewPage({ onNeuePruefung, onNeuePruefungLokal, onAu
         gap: isMobile ? "8px" : "16px",
         marginBottom: isMobile ? "12px" : "24px",
       }}>
-        <StatCard title="Prüfungen gesamt"     value={anzahlPruefungen} sub={`${offene} noch offen`} color="#4a6fa5" compact={isMobile} />
-        <StatCard title="Studierende bewertet" value="–"                sub="wird geladen"           color="#2d5a4b" compact={isMobile} />
-        {!isMobile && <StatCard title="Ø Bestehensquote" value="–" sub="wird geladen" color="#8b6914" />}
+        <StatCard title="Prüfungen gesamt"     value={anzahlPruefungen > 0 ? anzahlPruefungen : "–"} sub={anzahlPruefungen > 0 ? `${offene} noch offen` : "noch keine Prüfungen"} color="#4a6fa5" compact={isMobile} />
+        <StatCard title="Studierende bewertet" value={studierendeValue} sub={studierendeSub}           color="#2d5a4b" compact={isMobile} />
+        {!isMobile && <StatCard title="Ø Bestehensquote" value={bestehensquoteValue} sub={bestehensquoteSub} color="#8b6914" />}
       </div>
 
       {/* Fehler */}
@@ -203,7 +281,7 @@ export default function OverviewPage({ onNeuePruefung, onNeuePruefungLokal, onAu
           <p style={{ color: "#aaa", fontSize: "0.875rem", padding: "12px 0" }}>Keine Prüfungen gefunden.</p>
         ) : (
           allePruefungen.map((p) => (
-            <PruefungItem key={p.id} pruefung={p} onPruefungOeffnen={onPruefungOeffnen} onLoeschen={lokalePruefungLoeschen} isMobile={isMobile} />
+            <PruefungItem key={p.id} pruefung={p} onPruefungOeffnen={onPruefungOeffnen} onLoeschen={lokalePruefungLoeschen} onLoeschenOnline={onlinePruefungLoeschen} isMobile={isMobile} />
           ))
         )}
       </div>

@@ -19,7 +19,8 @@ async function request(path, options = {}) {
     throw new Error(safeBody.message || safeBody.fehler || `Serverfehler (HTTP ${res.status})`);
   }
 
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 export const api = {
@@ -49,6 +50,9 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(schluessel),
     }),
+
+  deletePruefung: (id) =>
+    request(`/api/pruefungen/${id}`, { method: "DELETE" }),
 
   auswerten: (data) =>
     request("/api/pruefung/auswerten", {
