@@ -38,6 +38,8 @@ export default function PruefungDetail({ pruefung, onZurueck }) {
   const [ladenErgebnisse, setLadenErgebnisse] = useState(true);
   const [fehlerAufgaben, setFehlerAufgaben] = useState(null);
   const [fehlerErgebnisse, setFehlerErgebnisse] = useState(null);
+  const [editSchluessel, setEditSchluessel] = useState(null);
+  const [schluesselGeaendert, setSchluesselGeaendert] = useState(false);
 
   useEffect(() => {
     api.getAufgaben(pruefung.id)
@@ -49,7 +51,35 @@ export default function PruefungDetail({ pruefung, onZurueck }) {
       .then(setErgebnisse)
       .catch((e) => setFehlerErgebnisse(e.message))
       .finally(() => setLadenErgebnisse(false));
+
+    api.getPruefungNotenschluessel(pruefung.id)
+      .then((data) => { if (data?.stufen) setEditSchluessel(data.stufen); })
+      .catch(() => {});
   }, [pruefung.id]);
+
+  const maxPunkte = pruefung.maxPunkte ?? 0;
+  const aktiverSchluessel = editSchluessel ?? DEFAULT_NOTENSCHLUESSEL_ANZEIGE;
+
+  function schwelleAendern(i, neueSchwelle) {
+    const basis = editSchluessel ?? DEFAULT_NOTENSCHLUESSEL_ANZEIGE.map(n => ({ ...n }));
+    setEditSchluessel(basis.map((n, j) => j === i ? { ...n, schwelle: Number(neueSchwelle) } : n));
+    setSchluesselGeaendert(true);
+  }
+
+  function punkteAendern(i, neuePkte) {
+    const neueSchwelle = maxPunkte > 0
+      ? Math.min(100, Math.max(0, Math.round(Number(neuePkte) / maxPunkte * 100)))
+      : 0;
+    const basis = editSchluessel ?? DEFAULT_NOTENSCHLUESSEL_ANZEIGE.map(n => ({ ...n }));
+    setEditSchluessel(basis.map((n, j) => j === i ? { ...n, schwelle: neueSchwelle } : n));
+    setSchluesselGeaendert(true);
+  }
+
+  function schluesselSpeichern() {
+    api.savePruefungNotenschluessel(pruefung.id, aktiverSchluessel)
+      .then(() => setSchluesselGeaendert(false))
+      .catch(() => alert("Fehler beim Speichern des Notenschlüssels."));
+  }
 
   const badge = getStatusBadge(pruefung.status);
   const datum = pruefung.datum
@@ -143,28 +173,46 @@ export default function PruefungDetail({ pruefung, onZurueck }) {
 
       {/* Notenschlüssel */}
       <div style={card}>
-        <h2 style={sectionTitle}>Notenschlüssel</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: "6px" }}>
-          {DEFAULT_NOTENSCHLUESSEL_ANZEIGE.map((item, i) => {
-            const maxPunkte = pruefung.maxPunkte ?? 0;
-            const minPunkte = item.schwelle > 0 ? Math.ceil(item.schwelle / 100 * maxPunkte) : null;
-            const prevMinPunkte = i > 0 ? Math.ceil(DEFAULT_NOTENSCHLUESSEL_ANZEIGE[i - 1].schwelle / 100 * maxPunkte) : null;
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+          <h2 style={{ ...sectionTitle, margin: 0 }}>Notenschlüssel</h2>
+          {schluesselGeaendert && (
+            <button onClick={schluesselSpeichern} style={primaerBtnStyle}>Speichern</button>
+          )}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
+          {aktiverSchluessel.map((eintrag, i) => {
+            const pkt = eintrag.schwelle > 0 ? Math.ceil(eintrag.schwelle / 100 * maxPunkte) : null;
+            const prevPkt = i > 0 ? Math.ceil(aktiverSchluessel[i - 1].schwelle / 100 * maxPunkte) : null;
             return (
-              <div key={item.note} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 10px", borderRadius: "7px", backgroundColor: "#fafafa", border: "1px solid #f0f0f0" }}>
-                <span style={{ backgroundColor: item.color, color: "white", padding: "2px 8px", borderRadius: "4px", fontSize: "0.78rem", fontWeight: "700", minWidth: "34px", textAlign: "center", flexShrink: 0 }}>
-                  {item.note}
+              <div key={eintrag.note} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ backgroundColor: eintrag.color, color: "white", padding: "2px 8px", borderRadius: "4px", fontSize: "0.78rem", fontWeight: "700", minWidth: "34px", textAlign: "center", flexShrink: 0 }}>
+                  {eintrag.note}
                 </span>
-                <span style={{ fontSize: "0.8rem", color: "#666", flex: 1 }}>
-                  {item.schwelle > 0
-                    ? `ab ${item.schwelle}%`
-                    : `unter ${DEFAULT_NOTENSCHLUESSEL_ANZEIGE[i - 1]?.schwelle ?? 50}%`}
-                </span>
-                {maxPunkte > 0 && (
-                  <span style={{ fontSize: "0.78rem", color: "#aaa", whiteSpace: "nowrap" }}>
-                    {item.schwelle > 0
-                      ? `≥ ${minPunkte} Pkt.`
-                      : `< ${prevMinPunkte} Pkt.`}
-                  </span>
+                {eintrag.note === "5,0" ? (
+                  <>
+                    <span style={{ fontSize: "0.82rem", color: "#888" }}>unter {aktiverSchluessel[i - 1]?.schwelle ?? 50}%</span>
+                    <span style={{ fontSize: "0.78rem", color: "#bbb" }}>= &lt; {prevPkt} Pkt.</span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: "0.82rem", color: "#666" }}>ab</span>
+                    <input
+                      type="number" min="1" max="100"
+                      value={eintrag.schwelle}
+                      onChange={(e) => schwelleAendern(i, e.target.value)}
+                      style={numInput}
+                    />
+                    <span style={{ fontSize: "0.82rem", color: "#666" }}>%</span>
+                    <span style={{ fontSize: "0.82rem", color: "#bbb", margin: "0 4px" }}>=</span>
+                    <span style={{ fontSize: "0.82rem", color: "#666" }}>≥</span>
+                    <input
+                      type="number" min="0" max={maxPunkte}
+                      value={pkt ?? 0}
+                      onChange={(e) => punkteAendern(i, e.target.value)}
+                      style={numInput}
+                    />
+                    <span style={{ fontSize: "0.82rem", color: "#666" }}>Pkt.</span>
+                  </>
                 )}
               </div>
             );
@@ -263,4 +311,26 @@ const hinweisStyle = {
   color: "#aaa",
   fontSize: "0.875rem",
   padding: "8px 0",
+};
+
+const numInput = {
+  border: "1px solid #e0e0e0",
+  borderRadius: "5px",
+  padding: "5px 8px",
+  fontSize: "0.875rem",
+  textAlign: "center",
+  width: "62px",
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+const primaerBtnStyle = {
+  backgroundColor: "#2d5a4b",
+  color: "white",
+  border: "none",
+  padding: "6px 16px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontWeight: "500",
+  fontSize: "0.82rem",
 };

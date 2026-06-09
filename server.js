@@ -305,6 +305,33 @@ app.get("/api/pruefungen/:id/ergebnisse", async (req, res) => {
   }
 });
 
+// ─── Notenschlüssel einer Prüfung laden ───────────────────
+app.get("/api/pruefungen/:id/notenschluessel", async (req, res) => {
+  try {
+    const response = await fetch(`${DB_URL}/notenschluessel/pruefung/${req.params.id}`);
+    if (response.status === 404) return res.status(404).json(null);
+    const data = await parseDbResponse(response);
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ fehler: "DB nicht erreichbar." });
+  }
+});
+
+// ─── Notenschlüssel einer Prüfung speichern ───────────────
+app.put("/api/pruefungen/:id/notenschluessel", async (req, res) => {
+  try {
+    const response = await fetch(`${DB_URL}/notenschluessel/pruefung/${req.params.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    const data = await parseDbResponse(response);
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ fehler: "DB nicht erreichbar." });
+  }
+});
+
 // ─── ENDPUNKT 4 ───────────────────────────────────────────
 // Notenschlüssel abrufen
 app.get("/api/notenschluessel", (req, res) => {
