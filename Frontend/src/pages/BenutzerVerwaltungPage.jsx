@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { alleBenutzer, benutzerAnlegen, benutzerLoeschen } from "../auth";
+import { useBreakpoint } from "../hooks/useBreakpoint";
 
 export default function BenutzerVerwaltungPage({ aktuellerBenutzer }) {
+  const { isMobile } = useBreakpoint();
   const [benutzer, setBenutzer] = useState(alleBenutzer());
   const [neuerName, setNeuerName] = useState("");
   const [neuesPasswort, setNeuesPasswort] = useState("");
@@ -35,14 +37,14 @@ export default function BenutzerVerwaltungPage({ aktuellerBenutzer }) {
   }
 
   return (
-    <div style={{ padding: "32px 36px", maxWidth: "700px" }}>
-      <h1 style={{ fontSize: "1.4rem", fontWeight: "600", marginBottom: "24px" }}>Benutzerverwaltung</h1>
+    <div style={{ padding: isMobile ? "16px" : "32px 36px", maxWidth: "700px" }}>
+      <h1 style={{ fontSize: isMobile ? "1.1rem" : "1.4rem", fontWeight: "600", marginBottom: "24px" }}>Benutzerverwaltung</h1>
 
       {/* Neuen Benutzer anlegen */}
       <div style={card}>
         <h2 style={sectionLabel}>Neuen Benutzer anlegen</h2>
         <form onSubmit={handleAnlegen}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
             <div>
               <label style={labelStyle}>Benutzername</label>
               <input
@@ -77,6 +79,7 @@ export default function BenutzerVerwaltungPage({ aktuellerBenutzer }) {
       {/* Benutzerliste */}
       <div style={card}>
         <h2 style={sectionLabel}>Alle Benutzer ({benutzer.length})</h2>
+        <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
           <thead>
             <tr style={{ borderBottom: "2px solid #e8e8e8" }}>
@@ -123,6 +126,7 @@ export default function BenutzerVerwaltungPage({ aktuellerBenutzer }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
