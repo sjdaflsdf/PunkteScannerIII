@@ -3,7 +3,7 @@ import { api } from "../api";
 
 const LEERE_AUFGABE = { bezeichnung: "", maxPunkte: "", papierTyp: "liniert", raumGroesse: "mittel" };
 
-const BEARBEITUNGSRAUM_HOEHEN = { klein: 100, mittel: 200, gross: 380 };
+const BEARBEITUNGSRAUM_HOEHEN = { klein: 150, mittel: 375, gross: 600 };
 
 const DEFAULT_NOTENSCHLUESSEL = [
   { note: "1,0", schwelle: 95, color: "#4CAF50" },
@@ -35,7 +35,7 @@ function BearbeitungsRaum({ typ, hoehe }) {
         ...base,
         backgroundImage: "repeating-linear-gradient(transparent, transparent 15px, #aac4ba 15px, #aac4ba 16px)",
         backgroundSize: "100% 16px",
-        backgroundPosition: "0 8px",
+        backgroundPosition: "0 15px",
         WebkitPrintColorAdjust: "exact",
         printColorAdjust: "exact",
       }} />
@@ -144,10 +144,10 @@ export default function PruefungAnlegenModal({ onClose, onAngelegt }) {
       : "";
 
     const aufgabenHTML = aufgaben.map((a, i) => {
-      const hoehe = { klein: 100, mittel: 200, gross: 380 }[a.raumGroesse] ?? 200;
+      const hoehe = { klein: 150, mittel: 375, gross: 600 }[a.raumGroesse] ?? 375;
       const raumBg =
         a.papierTyp === "liniert"
-          ? "background-image:repeating-linear-gradient(transparent,transparent 15px,#aac4ba 15px,#aac4ba 16px);background-size:100% 16px;background-position:0 8px;"
+          ? "background-image:repeating-linear-gradient(transparent,transparent 15px,#aac4ba 15px,#aac4ba 16px);background-size:100% 16px;background-position:0 15px;"
           : a.papierTyp === "kariert"
           ? "background-image:repeating-linear-gradient(transparent,transparent 15px,#aac4ba 15px,#aac4ba 16px),repeating-linear-gradient(90deg,transparent,transparent 15px,#aac4ba 15px,#aac4ba 16px);background-size:16px 16px;"
           : "";
@@ -160,7 +160,7 @@ export default function PruefungAnlegenModal({ onClose, onAngelegt }) {
       <div class="plabel">Max. Punkte</div>
       <div class="pzahl">${a.maxPunkte}</div>
       <div class="plabel erreicht">A${i + 1} ERREICHT</div>
-      <div class="ocr"><div class="ocranker"></div><div class="ocrdigit"></div></div>
+      <div class="ocr"><div class="ocranker"></div><div class="ocrdigit-z"></div><div class="ocrdigit-e"></div></div>
     </div>
   </div>
   <div class="bereich" style="height:${hoehe}px;${raumBg}"></div>
@@ -190,8 +190,8 @@ thead.rh td{padding-bottom:12px}
 .sline{height:24px;border-bottom:1.5px solid #222}
 
 /* ── Aufgabe ── */
-.aufgabe{margin-bottom:10px}
-.ah{display:flex;align-items:stretch;border:1.5px solid #c8d8d2;border-radius:4px 4px 0 0;overflow:hidden;background:#f6faf8;break-inside:avoid;page-break-inside:avoid}
+.aufgabe{margin-bottom:10px;break-inside:avoid;page-break-inside:avoid}
+.ah{display:flex;align-items:stretch;border:1.5px solid #c8d8d2;border-radius:4px 4px 0 0;overflow:hidden;background:#f6faf8}
 .anr{background:#2d5a4b;color:white;font-weight:700;font-size:11pt;min-width:38px;display:flex;align-items:center;justify-content:center;padding:8px;flex-shrink:0}
 .atext{flex:1;padding:9px 12px;font-size:10pt;line-height:1.5;word-wrap:break-word}
 .apkt{border-left:4px solid #000;width:96px;flex-shrink:0;padding:6px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
@@ -199,8 +199,8 @@ thead.rh td{padding-bottom:12px}
 .erreicht{margin-top:4px;font-size:7pt;font-weight:900;color:#000;letter-spacing:.06em}
 .pzahl{font-size:13pt;font-weight:700;color:#2d5a4b}
 .ocr{display:flex;gap:5px;margin-top:2px;justify-content:center;align-items:center}
-.ocrdigit{width:60px;height:50px;border:2.5px solid #000;border-radius:3px;background:#fff}
-.ocranker{width:0;height:0;border-top:4mm solid transparent;border-bottom:4mm solid transparent;border-left:4mm solid #000;margin-right:3mm;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ocrdigit-z,.ocrdigit-e{width:26px;height:50px;border:2.5px solid #000;border-radius:3px;background:#fff}
+.ocranker{width:0;height:0;border-top:4mm solid transparent;border-bottom:4mm solid transparent;border-left:4mm solid #000;margin-right:2mm;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .matdigits{display:flex;gap:3px;margin-top:4px}
 .matdigit{width:30px;height:36px;border:2.5px solid #000;border-radius:2px;background:#fff;flex-shrink:0}
 .bereich{border:1.5px solid #c8d8d2;border-top:none;border-radius:0 0 4px 4px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -562,13 +562,12 @@ thead.rh td{padding-bottom:12px}
                   {/* ── Eine Aufgabe pro Zeile ── */}
                   {aufgaben.map((aufgabe, i) => (
                     <tr key={i}>
-                      <td style={{ paddingBottom: "14px" }}>
+                      <td style={{ paddingBottom: "14px", pageBreakInside: "avoid", breakInside: "avoid" }}>
                         {/* Aufgaben-Header */}
                         <div style={{
                           display: "flex", alignItems: "stretch",
                           border: "1.5px solid #c8d8d2", borderRadius: "5px 5px 0 0",
                           overflow: "hidden", backgroundColor: "#f6faf8",
-                          pageBreakInside: "avoid", breakInside: "avoid",
                         }}>
                           <div style={{
                             backgroundColor: "#2d5a4b", color: "white",
@@ -592,8 +591,9 @@ thead.rh td{padding-bottom:12px}
                             <span style={{ fontSize: "1rem", fontWeight: "700", color: "#2d5a4b" }}>{aufgabe.maxPunkte}</span>
                             <span style={{ fontSize: "0.68rem", color: "#888", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: "4px" }}>Erreicht</span>
                             <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                              <div style={{ width:0, height:0, borderTop:"6px solid transparent", borderBottom:"6px solid transparent", borderLeft:"6px solid #000", marginRight:"4px", flexShrink:0 }} />
-                              <div style={{ width: "50px", height: "38px", border: "2px solid #000", borderRadius: "3px", backgroundColor: "#fff" }} />
+                              <div style={{ width:0, height:0, borderTop:"6px solid transparent", borderBottom:"6px solid transparent", borderLeft:"6px solid #000", marginRight:"2px", flexShrink:0 }} />
+                              <div style={{ width: "22px", height: "38px", border: "2px solid #000", borderRadius: "3px", backgroundColor: "#fff" }} />
+                              <div style={{ width: "22px", height: "38px", border: "2px solid #000", borderRadius: "3px", backgroundColor: "#fff" }} />
                             </div>
                           </div>
                         </div>
