@@ -95,7 +95,7 @@ async function erkennZiffer(jimpImg) {
   for (let i = 0; i < 28 * 28; i++) input[i] = data[i * 4] / 255;
 
   // DB-Abgleich: bestätigte Korrekturen bevorzugen
-  const dbTreffer = zifferAusDbSuchen(input);
+  const dbTreffer = await zifferAusDbSuchen(input);
   if (dbTreffer) {
     console.log(`    DB-Treffer: ${dbTreffer.ziffer} (sim=${dbTreffer.sim.toFixed(3)})`);
     return { digit: dbTreffer.ziffer, conf: dbTreffer.sim, sampleId: dbTreffer.id };
@@ -111,7 +111,7 @@ async function erkennZiffer(jimpImg) {
   const digit = probs.indexOf(Math.max(...probs));
   const conf = probs[digit];
 
-  const sampleId = zifferInDbSpeichern(input, digit, conf);
+  const sampleId = await zifferInDbSpeichern(input, digit, conf);
   return { digit, conf, sampleId };
 }
 
@@ -142,19 +142,12 @@ async function erkennPunktzahl(boxImg) {
   return { punkte: res.digit, sampleIds: res.sampleId ? [res.sampleId] : [] };
 }
 
-// ─── SQLite Lernfunktion ──────────────────────────────────
-const Database = require("better-sqlite3");
-const zifferDb = new Database(path.join(__dirname, "ziffer_samples.db"));
-zifferDb.exec(`
-  CREATE TABLE IF NOT EXISTS ziffer_samples (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    pixel_data  BLOB    NOT NULL,
-    mnist_digit INTEGER,
-    konfidenz   REAL,
-    korrigiert  INTEGER,
-    erstellt    INTEGER DEFAULT (strftime('%s','now'))
-  )
-`);
+// ─── Supabase Lernfunktion ────────────────────────────────
+const { createClient } = require("@supabase/supabase-js");
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SECRET_KEY
+);
 
 function pixelAehnlichkeit(a, b) {
   let dot = 0, na = 0, nb = 0;
@@ -164,30 +157,41 @@ function pixelAehnlichkeit(a, b) {
   return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
 }
 
-function zifferAusDbSuchen(pixelData) {
-  const rows = zifferDb.prepare(
-    "SELECT id, pixel_data, korrigiert FROM ziffer_samples WHERE korrigiert IS NOT NULL"
-  ).all();
+async function zifferAusDbSuchen(pixelData) {
+  const { data, error } = await supabase
+    .from("ziffer_samples")
+    .select("id, pixel_data, korrigiert")
+    .not("korrigiert", "is", null);
+  if (error || !data) return null;
   let best = null, bestSim = 0;
-  for (const row of rows) {
-    const sim = pixelAehnlichkeit(pixelData, new Float32Array(row.pixel_data.buffer));
+  for (const row of data) {
+    const arr = new Float32Array(Buffer.from(row.pixel_data, "base64").buffer);
+    const sim = pixelAehnlichkeit(pixelData, arr);
     if (sim > bestSim) { bestSim = sim; best = row; }
   }
   return bestSim > 0.97 ? { ziffer: best.korrigiert, sim: bestSim, id: best.id } : null;
 }
 
-function zifferInDbSpeichern(pixelData, mnistDigit, konfidenz) {
-  const buf = Buffer.from(pixelData.buffer);
-  return zifferDb.prepare(
-    "INSERT INTO ziffer_samples (pixel_data, mnist_digit, konfidenz) VALUES (?,?,?)"
-  ).run(buf, mnistDigit, konfidenz).lastInsertRowid;
+async function zifferInDbSpeichern(pixelData, mnistDigit, konfidenz) {
+  const pixel_data = Buffer.from(pixelData.buffer).toString("base64");
+  const { data, error } = await supabase
+    .from("ziffer_samples")
+    .insert({ pixel_data, mnist_digit: mnistDigit, konfidenz })
+    .select("id")
+    .single();
+  if (error) { console.error("Supabase insert:", error.message); return null; }
+  return data.id;
 }
 
 // ─── ENDPUNKT: Ziffer-Korrektur speichern ─────────────────
-app.post("/api/ocr/korrektur", (req, res) => {
+app.post("/api/ocr/korrektur", async (req, res) => {
   const { sampleId, ziffer } = req.body;
   if (sampleId == null || ziffer == null) return res.status(400).json({ fehler: "sampleId und ziffer erforderlich" });
-  zifferDb.prepare("UPDATE ziffer_samples SET korrigiert = ? WHERE id = ?").run(Number(ziffer), Number(sampleId));
+  const { error } = await supabase
+    .from("ziffer_samples")
+    .update({ korrigiert: Number(ziffer) })
+    .eq("id", Number(sampleId));
+  if (error) return res.status(500).json({ fehler: error.message });
   res.json({ ok: true });
 });
 
