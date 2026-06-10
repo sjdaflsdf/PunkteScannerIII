@@ -71,17 +71,20 @@ function exportAlleCSV(pruefungen) {
   download("﻿" + abschnitte.join("\n"), "Alle_Pruefungen_Ergebnisse.csv", "text/csv;charset=utf-8;");
 }
 
+import { useBreakpoint } from "../hooks/useBreakpoint";
+
 export default function ExportPage() {
+  const { isMobile } = useBreakpoint();
   const pruefungen = JSON.parse(localStorage.getItem("pruefungen_lokal") || "[]");
   const mitErgebnissen = pruefungen.filter((p) => p.ergebnisse.length > 0);
 
   return (
-    <div style={{ padding: "32px 36px", maxWidth: "900px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "1.4rem", fontWeight: "600" }}>Export</h1>
+    <div style={{ padding: isMobile ? "16px" : "32px 36px", maxWidth: "900px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "24px" }}>
+        <h1 style={{ fontSize: isMobile ? "1.1rem" : "1.4rem", fontWeight: "600" }}>Export</h1>
         {mitErgebnissen.length > 1 && (
           <button onClick={() => exportAlleCSV(mitErgebnissen)} style={primaerBtn}>
-            Alle als CSV exportieren
+            {isMobile ? "Alle CSV" : "Alle als CSV exportieren"}
           </button>
         )}
       </div>
