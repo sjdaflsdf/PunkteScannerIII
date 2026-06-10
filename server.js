@@ -633,6 +633,7 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
     }
 
     let matrikelnummer = null;
+    let matrikelCrops = [];
     const aufgaben = [];
     let aufgabeCounter = 0;  // globaler Zähler über alle Seiten
 
@@ -649,18 +650,22 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
       // ── 1. Matrikelnummer: 8 einzelne MNIST-Boxen ──────────────────────
       if (!matrikelnummer) {
         const ziffern = [];
+        const crops = [];
         for (let k = 0; k < 8; k++) {
           const bx = MAT_BOX_X0 + k * MAT_BOX_DX;
           const by = Math.max(0, MAT_BOX_Y0 - Math.floor(MAT_BOX_H / 2));
           const bw = Math.min(MAT_BOX_W, W - bx);
           const bh = Math.min(MAT_BOX_H, H - by);
-          if (bw <= 0 || bh <= 0) { ziffern.push(null); continue; }
+          if (bw <= 0 || bh <= 0) { ziffern.push(null); crops.push(null); continue; }
           const box = fuerCrops.clone().crop(bx, by, bw, bh);
+          const cropB64 = await box.clone().resize(60, 60).getBase64Async(Jimp.MIME_PNG);
+          crops.push(cropB64);
           const ziffer = await erkennZiffer(box);
           console.log(`  Matrikel[${k}]: ${ziffer.digit} (conf=${ziffer.conf.toFixed(2)})`);
           ziffern.push(ziffer.conf > 0.5 ? ziffer.digit : null);
         }
         matrikelnummer = ziffern.map(z => z !== null ? String(z) : "?").join("");
+        matrikelCrops = crops;
         console.log(`Matrikelnummer: ${matrikelnummer}`);
       }
 
@@ -679,14 +684,15 @@ app.post("/api/ocr/scan", upload.array("dateien", 20), async (req, res) => {
         console.log(`  A${aufgabeCounter}: boxTop=${boxTop} cropT=${cropT} cropH=${cropCH}`);
 
         const boxImg = fuerCrops.clone().crop(cropL2, cropT, cropCW, cropCH);
+        const cropB64 = await boxImg.clone().getBase64Async(Jimp.MIME_PNG);
         const { punkte, sampleIds: boxSampleIds } = await erkennPunktzahl(boxImg);
         console.log(`  A${aufgabeCounter}: → ${punkte}`);
-        aufgaben.push({ aufgabeNr: aufgabeCounter, bezeichnung: `Aufgabe ${aufgabeCounter}`, erreichterPunkte: punkte, sampleIds: boxSampleIds ?? [] });
+        aufgaben.push({ aufgabeNr: aufgabeCounter, bezeichnung: `Aufgabe ${aufgabeCounter}`, erreichterPunkte: punkte, sampleIds: boxSampleIds ?? [], cropPreview: cropB64 });
       }
     }
 
     aufgaben.sort((a, b) => a.aufgabeNr - b.aufgabeNr);
-    res.json({ matrikelnummer, aufgaben });
+    res.json({ matrikelnummer, matrikelCrops, aufgaben });
   } catch (err) {
     console.error("OCR-Fehler stack:", err.stack);
     console.error("OCR-Fehler cause:", err.cause);
