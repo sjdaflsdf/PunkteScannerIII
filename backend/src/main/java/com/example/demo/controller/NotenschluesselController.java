@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
+@RequestMapping("/api")
 public class NotenschluesselController {
 
     @Autowired
@@ -26,7 +27,7 @@ public class NotenschluesselController {
     private ObjectMapper objectMapper;
 
     // Standard-Notenschlüssel abrufen (bestehender Endpunkt)
-    @GetMapping("/api/notenschluessel")
+    @GetMapping("/notenschluessel")
     public ResponseEntity<?> getStandard() {
         return notenschluesselRepository.findByIstStandardTrue()
                 .map(ResponseEntity::ok)
@@ -34,7 +35,7 @@ public class NotenschluesselController {
     }
 
     // Notenschlüssel einer Prüfung abrufen
-    @GetMapping("/api/pruefungen/{pruefungId}/notenschluessel")
+    @GetMapping("/pruefungen/{pruefungId}/notenschluessel")
     public ResponseEntity<?> getByPruefung(@PathVariable Long pruefungId) {
         return notenschluesselRepository.findByPruefungId(pruefungId)
                 .map(ns -> {
@@ -52,7 +53,7 @@ public class NotenschluesselController {
     }
 
     // Notenschlüssel für eine Prüfung speichern / aktualisieren
-    @PutMapping("/api/pruefungen/{pruefungId}/notenschluessel")
+    @PutMapping("/pruefungen/{pruefungId}/notenschluessel")
     public ResponseEntity<?> saveByPruefung(
             @PathVariable Long pruefungId,
             @RequestBody List<Map<String, Object>> stufen) {
