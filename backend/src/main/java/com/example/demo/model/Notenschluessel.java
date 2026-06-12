@@ -2,6 +2,9 @@ package com.example.demo.model;
 
 import jakarta.persistence.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
     @Entity
     @Table(name = "Notenschluessel")
     public class Notenschluessel {
@@ -16,14 +19,13 @@ import jakarta.persistence.*;
 
         private boolean istStandard;
 
-        // Notenstufen als JSON gespeichert
-        @Column(columnDefinition = "TEXT")
-        private String stufen;
+        @OneToMany(mappedBy = "notenschluessel", cascade = CascadeType.ALL, orphanRemoval = true)
+        private List<Notenstufe> stufen = new ArrayList<>();
 
 
         public Notenschluessel() {}
 
-        public Notenschluessel(Pruefung pruefung, boolean istStandard, String stufen) {
+        public Notenschluessel(Pruefung pruefung, boolean istStandard, List<Notenstufe> stufen) {
             this.pruefung = pruefung;
             this.istStandard = istStandard;
             this.stufen = stufen;
@@ -38,7 +40,7 @@ import jakarta.persistence.*;
         public boolean isIstStandard() { return istStandard; }
         public void setIstStandard(boolean istStandard) {this.istStandard = istStandard;}
 
-        public String getStufen() { return stufen; }
-        public void setStufen(String stufen) {this.stufen = stufen;}
+        public List<Notenstufe> getStufen() { return stufen; }
+        public void setStufen(List<Notenstufe> stufen) {this.stufen = stufen;}
     }
 

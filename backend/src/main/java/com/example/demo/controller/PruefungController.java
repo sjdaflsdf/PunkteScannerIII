@@ -1,19 +1,22 @@
 package com.example.demo.controller;
 
 import com.example.demo.model.Notenschluessel;
+import com.example.demo.model.NotenschluesselDefaults;
+import com.example.demo.model.Notenstufe;
 import com.example.demo.model.Pruefung;
 import com.example.demo.repository.NotenschluesselRepository;
 import com.example.demo.repository.PruefungRepository;
 import com.example.demo.service.PruefungService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/pruefungen")
@@ -27,9 +30,6 @@ public class PruefungController {
 
     @Autowired
     private PruefungRepository pruefungRepository;
-
-    @Autowired
-    private ObjectMapper objectMapper;
 
         // Alle Prüfungen laden
         @GetMapping
@@ -79,22 +79,27 @@ public class PruefungController {
             return ResponseEntity.noContent().build();
         }
 
-    // Notenschlüssel einer Prüfung abrufen
+    // Notenschlüssel einer Prüfung abrufen (mit Standard-Fallback)
     @GetMapping("/{pruefungId}/notenschluessel")
     public ResponseEntity<?> getByPruefung(@PathVariable Long pruefungId) {
-        return notenschluesselRepository.findByPruefungId(pruefungId)
-                .map(ns -> {
-                    try {
-                        Map<String, Object> result = new HashMap<>();
-                        result.put("id", ns.getId());
-                        result.put("istStandard", ns.isIstStandard());
-                        result.put("stufen", objectMapper.readValue(ns.getStufen(), List.class));
-                        return ResponseEntity.ok(result);
-                    } catch (Exception e) {
-                        return ResponseEntity.internalServerError().build();
-                    }
-                })
-                .orElse(ResponseEntity.notFound().build());
+        Map<String, Object> result = new HashMap<>();
+        Notenschluessel ns = notenschluesselRepository.findByPruefungId(pruefungId).orElse(null);
+        if (ns != null) {
+            result.put("id", ns.getId());
+            result.put("istStandard", ns.isIstStandard());
+            result.put("stufen", ns.getStufen().stream().map(s -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("note", s.getNote());
+                m.put("schwelle", s.getSchwelle());
+                m.put("color", s.getColor());
+                return m;
+            }).collect(Collectors.toList()));
+        } else {
+            result.put("id", null);
+            result.put("istStandard", true);
+            result.put("stufen", NotenschluesselDefaults.getDefaultStufen());
+        }
+        return ResponseEntity.ok(result);
     }
 
     // Notenschlüssel für eine Prüfung speichern / aktualisieren
@@ -106,23 +111,27 @@ public class PruefungController {
         Pruefung pruefung = pruefungRepository.findById(pruefungId).orElse(null);
         if (pruefung == null) return ResponseEntity.notFound().build();
 
-        try {
-            String stufenJson = objectMapper.writeValueAsString(stufen);
-            Notenschluessel ns = notenschluesselRepository.findByPruefungId(pruefungId)
-                    .orElse(new Notenschluessel());
-            ns.setPruefung(pruefung);
-            ns.setIstStandard(false);
-            ns.setStufen(stufenJson);
-            notenschluesselRepository.save(ns);
+        Notenschluessel ns = notenschluesselRepository.findByPruefungId(pruefungId)
+                .orElse(new Notenschluessel());
+        ns.setPruefung(pruefung);
+        ns.setIstStandard(false);
 
-            Map<String, Object> result = new HashMap<>();
-            result.put("id", ns.getId());
-            result.put("istStandard", false);
-            result.put("stufen", stufen);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().build();
+        ns.getStufen().clear();
+        for (Map<String, Object> stufe : stufen) {
+            ns.getStufen().add(new Notenstufe(
+                    String.valueOf(stufe.get("note")),
+                    Double.parseDouble(String.valueOf(stufe.get("schwelle"))),
+                    String.valueOf(stufe.get("color")),
+                    ns
+            ));
         }
+        notenschluesselRepository.save(ns);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", ns.getId());
+        result.put("istStandard", false);
+        result.put("stufen", stufen);
+        return ResponseEntity.ok(result);
     }
     }
 
