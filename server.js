@@ -277,10 +277,12 @@ async function erkennPunktzahl(zehnerImg, einerImg) {
 
 // ─── Supabase Lernfunktion ────────────────────────────────
 const { createClient } = require("@supabase/supabase-js");
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SECRET_KEY
-);
+let supabase = null;
+if (process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY) {
+  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY);
+} else {
+  console.warn("Supabase nicht konfiguriert – OCR-Lernfunktion deaktiviert.");
+}
 
 function pixelAehnlichkeit(a, b) {
   let dot = 0, na = 0, nb = 0;
@@ -296,6 +298,7 @@ function pixelAehnlichkeit(a, b) {
 let _sampleCache = null;  // [{id, korrigiert, arr: Float32Array}]
 
 async function ladeSampleCache() {
+  if (!supabase) { _sampleCache = []; return; }
   const { data, error } = await supabase
     .from("ziffer_samples")
     .select("id, pixel_data, korrigiert")
@@ -322,6 +325,7 @@ async function zifferAusDbSuchen(pixelData) {
 }
 
 async function zifferInDbSpeichern(pixelData, mnistDigit, konfidenz, cropB64) {
+  if (!supabase) return null;
   const pixel_data = Buffer.from(pixelData.buffer).toString("base64");
   const { data, error } = await supabase
     .from("ziffer_samples")
@@ -336,6 +340,7 @@ async function zifferInDbSpeichern(pixelData, mnistDigit, konfidenz, cropB64) {
 app.post("/api/ocr/korrektur", async (req, res) => {
   const { sampleId, ziffer } = req.body;
   if (sampleId == null || ziffer == null) return res.status(400).json({ fehler: "sampleId und ziffer erforderlich" });
+  if (!supabase) return res.status(503).json({ fehler: "Supabase nicht konfiguriert" });
   const { error } = await supabase
     .from("ziffer_samples")
     .update({ korrigiert: Number(ziffer) })
@@ -346,6 +351,7 @@ app.post("/api/ocr/korrektur", async (req, res) => {
 
 // ─── ENDPUNKT: Alle gespeicherten Samples abrufen ─────────
 app.get("/api/ocr/samples", async (req, res) => {
+  if (!supabase) return res.json([]);
   const { data, error } = await supabase
     .from("ziffer_samples")
     .select("id, mnist_digit, korrigiert, konfidenz, crop_b64")
@@ -359,6 +365,7 @@ app.get("/api/ocr/samples", async (req, res) => {
 // Leert die ziffer_samples-Tabelle komplett. Supabase verlangt eine Filter-Bedingung
 // für delete → gt("id", 0) trifft alle Zeilen (ids sind positive Serials).
 app.delete("/api/ocr/samples", async (req, res) => {
+  if (!supabase) return res.status(503).json({ fehler: "Supabase nicht konfiguriert" });
   const { error, count } = await supabase
     .from("ziffer_samples")
     .delete({ count: "exact" })

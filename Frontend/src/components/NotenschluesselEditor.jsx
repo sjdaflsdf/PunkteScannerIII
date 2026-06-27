@@ -9,7 +9,7 @@ export default function NotenschluesselEditor({ pruefungName = null }) {
 
   useEffect(() => {
     api.getNotenschluessel()
-      .then((data) => setSchluessel(data))
+      .then((data) => setSchluessel(Array.isArray(data) ? data : []))
       .catch((e) => setFehler(e.message))
       .finally(() => setLoading(false));
   }, []);
