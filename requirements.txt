@@ -1,0 +1,5 @@
+# Python-Abhängigkeiten für aruco_warp.py (Seiten-Entzerrung via ArUco/OpenCV).
+# server.js ruft `python3 aruco_warp.py warp ...` pro Scan-Seite auf.
+# Installieren:  pip3 install -r requirements.txt
+opencv-python>=4.7
+numpy>=1.24

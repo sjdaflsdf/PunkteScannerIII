@@ -24,6 +24,7 @@
     "jimp": "^0.22.12",
     "multer": "^2.1.1",
     "node-fetch": "^3.3.2",
-    "onnxruntime-node": "^1.26.0"
+    "onnxruntime-node": "^1.26.0",
+    "pdf-to-png-converter": "^4.1.1"
   }
 }

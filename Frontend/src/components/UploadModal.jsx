@@ -147,8 +147,12 @@ export default function UploadModal({ onClose, onErgebnis }) {
     for (const [i, aufgabe] of ocrErgebnis.aufgaben.entries()) {
       const korrigiert = Number(erreichterPunkte[i]);
       if (aufgabe.erreichterPunkte !== korrigiert && aufgabe.sampleIds?.length > 0) {
-        for (const sampleId of aufgabe.sampleIds) {
-          api.ocrKorrektur(sampleId, korrigiert).catch(() => {});
+        const ids = aufgabe.sampleIds;
+        if (ids.length === 1) {
+          api.ocrKorrektur(ids[0], korrigiert).catch(() => {});
+        } else if (ids.length >= 2) {
+          api.ocrKorrektur(ids[0], Math.floor(korrigiert / 10)).catch(() => {});
+          api.ocrKorrektur(ids[1], korrigiert % 10).catch(() => {});
         }
       }
     }
