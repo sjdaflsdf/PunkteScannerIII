@@ -34,7 +34,7 @@ export default function ErgebnisseTabelle({ pruefungId }) {
     fetch(`${API}/api/pruefungen/${pruefungId}/ergebnisse`)
       .then((r) => r.json())
       .then((daten) => {
-        setErgebnisse(daten);
+        setErgebnisse(Array.isArray(daten) ? daten : []);
         setLaden(false);
       })
       .catch(() => {

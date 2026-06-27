@@ -30,8 +30,9 @@ export default function NotenverteilungChart({ pruefungId }) {
     fetch(`${API}/api/pruefungen/${pruefungId}/ergebnisse`)
       .then((r) => r.json())
       .then((daten) => {
-        setErgebnisse(daten);
-        if (daten[0]?.pruefung?.name) setPruefungName(daten[0].pruefung.name);
+        const liste = Array.isArray(daten) ? daten : [];
+        setErgebnisse(liste);
+        if (liste[0]?.pruefung?.name) setPruefungName(liste[0].pruefung.name);
         setLaden(false);
       })
       .catch(() => setLaden(false));
