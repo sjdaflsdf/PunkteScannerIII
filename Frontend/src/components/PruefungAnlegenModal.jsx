@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
 import { api } from "../api";
+import { ARUCO_MARKERS, ARUCO_TASK_MARKERS } from "../arucoMarkers";
 
 const LEERE_AUFGABE = { bezeichnung: "", maxPunkte: "", papierTyp: "liniert", raumGroesse: "mittel" };
 
-const BEARBEITUNGSRAUM_HOEHEN = { klein: 100, mittel: 200, gross: 380 };
+const BEARBEITUNGSRAUM_HOEHEN = { klein: 150, mittel: 375, gross: 600 };
 
 const DEFAULT_NOTENSCHLUESSEL = [
   { note: "1,0", schwelle: 95, color: "#4CAF50" },
@@ -35,7 +36,7 @@ function BearbeitungsRaum({ typ, hoehe }) {
         ...base,
         backgroundImage: "repeating-linear-gradient(transparent, transparent 15px, #aac4ba 15px, #aac4ba 16px)",
         backgroundSize: "100% 16px",
-        backgroundPosition: "0 8px",
+        backgroundPosition: "0 15px",
         WebkitPrintColorAdjust: "exact",
         printColorAdjust: "exact",
       }} />
@@ -144,10 +145,10 @@ export default function PruefungAnlegenModal({ onClose, onAngelegt }) {
       : "";
 
     const aufgabenHTML = aufgaben.map((a, i) => {
-      const hoehe = { klein: 100, mittel: 200, gross: 380 }[a.raumGroesse] ?? 200;
+      const hoehe = { klein: 150, mittel: 375, gross: 600 }[a.raumGroesse] ?? 375;
       const raumBg =
         a.papierTyp === "liniert"
-          ? "background-image:repeating-linear-gradient(transparent,transparent 15px,#aac4ba 15px,#aac4ba 16px);background-size:100% 16px;background-position:0 8px;"
+          ? "background-image:repeating-linear-gradient(transparent,transparent 15px,#aac4ba 15px,#aac4ba 16px);background-size:100% 16px;background-position:0 15px;"
           : a.papierTyp === "kariert"
           ? "background-image:repeating-linear-gradient(transparent,transparent 15px,#aac4ba 15px,#aac4ba 16px),repeating-linear-gradient(90deg,transparent,transparent 15px,#aac4ba 15px,#aac4ba 16px);background-size:16px 16px;"
           : "";
@@ -159,8 +160,8 @@ export default function PruefungAnlegenModal({ onClose, onAngelegt }) {
     <div class="apkt">
       <div class="plabel">Max. Punkte</div>
       <div class="pzahl">${a.maxPunkte}</div>
-      <div class="plabel erreicht">A${i + 1} ERREICHT</div>
-      <div class="ocr"><div class="ocranker"></div><div class="ocrdigit"></div></div>
+      ${ARUCO_TASK_MARKERS[i] ? `<img class="taskmarker" src="${ARUCO_TASK_MARKERS[i]}">` : `<div class="plabel erreicht">A${i + 1} ERREICHT</div>`}
+      <div class="ocr"><div class="ocrdigit-z"></div><div class="ocrdigit-e"></div></div>
     </div>
   </div>
   <div class="bereich" style="height:${hoehe}px;${raumBg}"></div>
@@ -173,13 +174,18 @@ export default function PruefungAnlegenModal({ onClose, onAngelegt }) {
 <meta charset="UTF-8">
 <title>${esc(klausurName)}</title>
 <style>
-@page { size: A4 portrait; margin: 14mm 18mm; }
+/* margin:0 → die Seitenränder kommen aus dem Tabellen-Padding (wiederholt sich pro
+   Druckseite). Nur so liegen die position:fixed-Eckmarker an der echten Papierkante
+   (mit @page-margin positioniert Chrome fixed relativ zum Inhaltsbereich → Marker im Text). */
+@page { size: A4 portrait; margin: 0; }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#1a1a1a;background:white}
 
 /* ── Repeating header via table thead ── */
 table.outer{width:100%;border-collapse:collapse;table-layout:fixed}
-thead.rh td{padding-bottom:12px}
+.outer td{padding-left:18mm;padding-right:18mm}      /* seitliche Ränder, jede Seite */
+thead.rh td{padding-top:16mm;padding-bottom:12px}    /* oberer Rand, klärt die Eckmarker */
+tfoot.rf td{height:28mm}                             /* unterer Rand, hält Inhalt von den (tiefer gesetzten) unteren Markern fern */
 .hbox{border:1.5pt solid #2d5a4b;border-radius:5px;padding:10px 14px}
 .hd{display:flex;justify-content:space-between;align-items:flex-end;gap:8px;border-bottom:1pt solid #c8d8d2;padding-bottom:8px;margin-bottom:8px}
 .htitle{font-size:13pt;font-weight:700}
@@ -190,35 +196,39 @@ thead.rh td{padding-bottom:12px}
 .sline{height:24px;border-bottom:1.5px solid #222}
 
 /* ── Aufgabe ── */
-.aufgabe{margin-bottom:10px}
-.ah{display:flex;align-items:stretch;border:1.5px solid #c8d8d2;border-radius:4px 4px 0 0;overflow:hidden;background:#f6faf8;break-inside:avoid;page-break-inside:avoid}
+.aufgabe{margin-bottom:10px;break-inside:avoid;page-break-inside:avoid}
+.ah{display:flex;align-items:stretch;border:1.5px solid #c8d8d2;border-radius:4px 4px 0 0;overflow:hidden;background:#f6faf8}
 .anr{background:#2d5a4b;color:white;font-weight:700;font-size:11pt;min-width:38px;display:flex;align-items:center;justify-content:center;padding:8px;flex-shrink:0}
 .atext{flex:1;padding:9px 12px;font-size:10pt;line-height:1.5;word-wrap:break-word}
-.apkt{border-left:4px solid #000;width:96px;flex-shrink:0;padding:6px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.apkt{border-left:4px solid #000;width:140px;flex-shrink:0;padding:6px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
 .plabel{font-size:6pt;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;text-align:center;line-height:1.3}
 .erreicht{margin-top:4px;font-size:7pt;font-weight:900;color:#000;letter-spacing:.06em}
 .pzahl{font-size:13pt;font-weight:700;color:#2d5a4b}
+.taskmarker{width:6mm;height:6mm;image-rendering:pixelated;margin:2px 0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .ocr{display:flex;gap:5px;margin-top:2px;justify-content:center;align-items:center}
-.ocrdigit{width:60px;height:50px;border:2.5px solid #000;border-radius:3px;background:#fff}
-.ocranker{width:0;height:0;border-top:4mm solid transparent;border-bottom:4mm solid transparent;border-left:4mm solid #000;margin-right:3mm;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.matdigits{display:flex;gap:3px;margin-top:4px}
+.ocrdigit-z,.ocrdigit-e{width:26px;height:50px;border:2.5px solid #000;border-radius:3px;background:#fff}
+.ocranker{width:5mm;height:5mm;border:2.7mm solid #000;margin-right:2.5mm;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.matdigits{display:flex;gap:3px;margin-top:4px;align-items:center}
+.matanker{width:5mm;height:5mm;border:2.7mm solid #000;margin-right:2.5mm;flex-shrink:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .matdigit{width:30px;height:36px;border:2.5px solid #000;border-radius:2px;background:#fff;flex-shrink:0}
 .bereich{border:1.5px solid #c8d8d2;border-top:none;border-radius:0 0 4px 4px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 
 .hinweis{margin-top:10px;font-size:7pt;color:#bbb;text-align:center}
 
-/* ── OCR-Eckmarker: schwarze Dreiecke in den Seitenecken ── */
-.ocreck{position:fixed;width:0;height:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.ocreck-tl{top:0;left:0;border-top:6mm solid #000;border-right:6mm solid transparent}
-.ocreck-tr{top:0;right:0;border-top:6mm solid #000;border-left:6mm solid transparent}
-.ocreck-bl{bottom:0;left:0;border-bottom:6mm solid #000;border-right:6mm solid transparent}
-.ocreck-br{bottom:0;right:0;border-bottom:6mm solid #000;border-left:6mm solid transparent}
+/* ── OCR-Eckmarker: ArUco-Marker (DICT_4X4_50, IDs 0..3 = TL,TR,BL,BR) zum Entzerren
+   der Seite per Homographie. 10mm, 5mm vom Rand (Quiet Zone + kein Drucker-Beschnitt).
+   image-rendering:pixelated → scharfe Kanten, der Drucker blurrt das Muster nicht. ── */
+.ocreck{position:fixed;width:10mm;height:10mm;image-rendering:pixelated;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ocreck-tl{top:5mm;left:5mm}
+.ocreck-tr{top:5mm;right:5mm}
+.ocreck-bl{bottom:16mm;left:5mm}
+.ocreck-br{bottom:16mm;right:5mm}
 </style>
 </head><body>
-<div class="ocreck ocreck-tl"></div>
-<div class="ocreck ocreck-tr"></div>
-<div class="ocreck ocreck-bl"></div>
-<div class="ocreck ocreck-br"></div>
+<img class="ocreck ocreck-tl" src="${ARUCO_MARKERS[0]}">
+<img class="ocreck ocreck-tr" src="${ARUCO_MARKERS[1]}">
+<img class="ocreck ocreck-bl" src="${ARUCO_MARKERS[2]}">
+<img class="ocreck ocreck-br" src="${ARUCO_MARKERS[3]}">
 <table class="outer">
 <thead class="rh"><tr><td>
   <div class="hbox">
@@ -231,7 +241,7 @@ thead.rh td{padding-bottom:12px}
     </div>
     <div class="studi">
       <div><div class="slabel">Name, Vorname</div><div class="sline"></div></div>
-      <div><div class="slabel">Matrikelnummer</div><div class="matdigits">${"<div class=\"matdigit\"></div>".repeat(8)}</div></div>
+      <div><div class="slabel">Matrikelnummer</div><div class="matdigits"><div class="matanker"></div>${"<div class=\"matdigit\"></div>".repeat(8)}</div></div>
     </div>
   </div>
 </td></tr></thead>
@@ -241,6 +251,7 @@ thead.rh td{padding-bottom:12px}
   <p class="hinweis">Punkte deutlich in die Felder eintragen · wird per Scan ausgewertet</p>
 </td></tr>
 </tbody>
+<tfoot class="rf"><tr><td></td></tr></tfoot>
 </table>
 </body></html>`;
 
@@ -506,14 +517,14 @@ thead.rh td{padding-bottom:12px}
 
             {/* ── Druckbares Template ── */}
             <div ref={printRef} style={{ ...templateContainerStyle, overflowX: "auto", position: "relative" }}>
-              {/* OCR-Eckmarker (Vorschau) */}
+              {/* OCR-Eckmarker (Vorschau) – ArUco wie im Druck (IDs 0..3 = TL,TR,BL,BR) */}
               {[
-                { top:0, left:0,  borderTop:"8px solid #000", borderRight:"8px solid transparent" },
-                { top:0, right:0, borderTop:"8px solid #000", borderLeft:"8px solid transparent" },
-                { bottom:0, left:0,  borderBottom:"8px solid #000", borderRight:"8px solid transparent" },
-                { bottom:0, right:0, borderBottom:"8px solid #000", borderLeft:"8px solid transparent" },
-              ].map((s, i) => (
-                <div key={i} style={{ position:"absolute", width:0, height:0, ...s }} />
+                { top:4, left:4 },
+                { top:4, right:4 },
+                { bottom:4, left:4 },
+                { bottom:4, right:4 },
+              ].map((pos, i) => (
+                <img key={i} src={ARUCO_MARKERS[i]} alt="" style={{ position:"absolute", width:22, height:22, imageRendering:"pixelated", ...pos }} />
               ))}
               {/*
                 Wrapper-Tabelle: <thead> wiederholt sich auf jeder Druckseite automatisch.
@@ -545,7 +556,8 @@ thead.rh td{padding-bottom:12px}
                           </div>
                           <div>
                             <span style={templateLabelStyle}>Matrikelnummer</span>
-                            <div style={{ display:"flex", gap:"2px", marginTop:"4px" }}>
+                            <div style={{ display:"flex", gap:"2px", marginTop:"4px", alignItems:"center" }}>
+                              <div style={{ width:"9px", height:"9px", backgroundColor:"#000", marginRight:"3px", flexShrink:0 }} />
                               {Array.from({length:8}).map((_,k) => (
                                 <div key={k} style={{ width:"16px", height:"26px", border:"2px solid #000", borderRadius:"2px", backgroundColor:"#fff", flexShrink:0 }} />
                               ))}
@@ -562,13 +574,12 @@ thead.rh td{padding-bottom:12px}
                   {/* ── Eine Aufgabe pro Zeile ── */}
                   {aufgaben.map((aufgabe, i) => (
                     <tr key={i}>
-                      <td style={{ paddingBottom: "14px" }}>
+                      <td style={{ paddingBottom: "14px", pageBreakInside: "avoid", breakInside: "avoid" }}>
                         {/* Aufgaben-Header */}
                         <div style={{
                           display: "flex", alignItems: "stretch",
                           border: "1.5px solid #c8d8d2", borderRadius: "5px 5px 0 0",
                           overflow: "hidden", backgroundColor: "#f6faf8",
-                          pageBreakInside: "avoid", breakInside: "avoid",
                         }}>
                           <div style={{
                             backgroundColor: "#2d5a4b", color: "white",
@@ -592,8 +603,9 @@ thead.rh td{padding-bottom:12px}
                             <span style={{ fontSize: "1rem", fontWeight: "700", color: "#2d5a4b" }}>{aufgabe.maxPunkte}</span>
                             <span style={{ fontSize: "0.68rem", color: "#888", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.04em", marginTop: "4px" }}>Erreicht</span>
                             <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
-                              <div style={{ width:0, height:0, borderTop:"6px solid transparent", borderBottom:"6px solid transparent", borderLeft:"6px solid #000", marginRight:"4px", flexShrink:0 }} />
-                              <div style={{ width: "50px", height: "38px", border: "2px solid #000", borderRadius: "3px", backgroundColor: "#fff" }} />
+                              <div style={{ width:"10px", height:"10px", backgroundColor:"#000", marginRight:"4px", flexShrink:0 }} />
+                              <div style={{ width: "22px", height: "38px", border: "2px solid #000", borderRadius: "3px", backgroundColor: "#fff" }} />
+                              <div style={{ width: "22px", height: "38px", border: "2px solid #000", borderRadius: "3px", backgroundColor: "#fff" }} />
                             </div>
                           </div>
                         </div>

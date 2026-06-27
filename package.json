@@ -16,6 +16,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@supabase/supabase-js": "^2.108.1",
     "better-sqlite3": "^12.10.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
@@ -23,6 +24,7 @@
     "jimp": "^0.22.12",
     "multer": "^2.1.1",
     "node-fetch": "^3.3.2",
-    "onnxruntime-node": "^1.26.0"
+    "onnxruntime-node": "^1.26.0",
+    "pdf-to-png-converter": "^4.1.1"
   }
 }

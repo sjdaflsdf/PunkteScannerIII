@@ -17,6 +17,7 @@ export default function UploadModal({ onClose, onErgebnis }) {
   const [studentId, setStudentId] = useState(null);
   const [studentDialog, setStudentDialog] = useState(null); // { matNr, name }
   const [studentName, setStudentName] = useState("");
+  const [zeigeCrops, setZeigeCrops] = useState(false);
   const [pruefungAufgaben, setPruefungAufgaben] = useState([]); // Aufgaben der gewählten Prüfung (inkl. maxPunkte)
   const [saveFehler, setSaveFehler] = useState(null);
 
@@ -146,8 +147,12 @@ export default function UploadModal({ onClose, onErgebnis }) {
     for (const [i, aufgabe] of ocrErgebnis.aufgaben.entries()) {
       const korrigiert = Number(erreichterPunkte[i]);
       if (aufgabe.erreichterPunkte !== korrigiert && aufgabe.sampleIds?.length > 0) {
-        for (const sampleId of aufgabe.sampleIds) {
-          api.ocrKorrektur(sampleId, korrigiert).catch(() => {});
+        const ids = aufgabe.sampleIds;
+        if (ids.length === 1) {
+          api.ocrKorrektur(ids[0], korrigiert).catch(() => {});
+        } else if (ids.length >= 2) {
+          api.ocrKorrektur(ids[0], Math.floor(korrigiert / 10)).catch(() => {});
+          api.ocrKorrektur(ids[1], korrigiert % 10).catch(() => {});
         }
       }
     }
@@ -483,6 +488,16 @@ export default function UploadModal({ onClose, onErgebnis }) {
         {/* ── Schritt 3: OCR-Ergebnis prüfen ── */}
         {schritt === 3 && ocrErgebnis && (
           <div>
+            {/* Toggle Crop-Vorschau */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
+              <button
+                onClick={() => setZeigeCrops(v => !v)}
+                style={{ fontSize: "0.78rem", padding: "4px 12px", borderRadius: "6px", border: "1px solid #c8d8d2", background: zeigeCrops ? "#2d5a4b" : "#f6faf8", color: zeigeCrops ? "white" : "#2d5a4b", cursor: "pointer" }}
+              >
+                {zeigeCrops ? "Scan-Vorschau ausblenden" : "Scan-Vorschau einblenden"}
+              </button>
+            </div>
+
             <div style={{ marginBottom: "20px" }}>
               <label style={labelStyle}>Matrikelnummer</label>
               <input
@@ -497,6 +512,15 @@ export default function UploadModal({ onClose, onErgebnis }) {
                   Nicht erkannt — bitte manuell eintragen.
                 </p>
               )}
+              {zeigeCrops && ocrErgebnis.matrikelCrops?.length > 0 && (
+                <div style={{ display: "flex", gap: "4px", marginTop: "8px", flexWrap: "wrap" }}>
+                  {ocrErgebnis.matrikelCrops.map((crop, k) => (
+                    crop
+                      ? <img key={k} src={crop} title={`Ziffer ${k + 1}`} style={{ width: "36px", height: "36px", border: "1px solid #e0e0e0", borderRadius: "4px", imageRendering: "pixelated" }} />
+                      : <div key={k} style={{ width: "36px", height: "36px", border: "1px solid #e0e0e0", borderRadius: "4px", background: "#f5f5f5" }} />
+                  ))}
+                </div>
+              )}
             </div>
 
             <label style={labelStyle}>Erreichte Punkte je Aufgabe</label>
@@ -508,6 +532,7 @@ export default function UploadModal({ onClose, onErgebnis }) {
                     <th style={tableThStyle}>Aufgabe</th>
                     <th style={{ ...tableThStyle, textAlign: "center" }}>Erreicht</th>
                     <th style={{ ...tableThStyle, textAlign: "center" }}>Max.</th>
+                    {zeigeCrops && <th style={{ ...tableThStyle, textAlign: "center" }}>Scan</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -544,6 +569,13 @@ export default function UploadModal({ onClose, onErgebnis }) {
                       <td style={{ padding: "10px 12px", textAlign: "center", fontSize: "0.85rem", color: "#999", width: "60px" }}>
                         {aufgabe.maxPunkte}
                       </td>
+                      {zeigeCrops && (
+                        <td style={{ padding: "6px 12px", textAlign: "center", width: "80px" }}>
+                          {aufgabe.cropPreview
+                            ? <img src={aufgabe.cropPreview} style={{ height: "40px", border: "1px solid #e0e0e0", borderRadius: "4px", imageRendering: "pixelated" }} />
+                            : <span style={{ color: "#ccc", fontSize: "0.75rem" }}>–</span>}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

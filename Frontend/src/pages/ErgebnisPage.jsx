@@ -1,9 +1,11 @@
 import ErgebnisAnzeige from "../components/ErgebnisAnzeige";
+import { useBreakpoint } from "../hooks/useBreakpoint";
 
 export default function ErgebnisPage({ ergebnis, onZurueck }) {
+  const { isMobile } = useBreakpoint();
   if (!ergebnis) {
     return (
-      <div style={{ padding: "32px 36px" }}>
+      <div style={{ padding: isMobile ? "16px" : "32px 36px" }}>
         <div style={{
           backgroundColor: "white",
           borderRadius: "12px",
@@ -20,21 +22,17 @@ export default function ErgebnisPage({ ergebnis, onZurueck }) {
   }
 
   return (
-    <div style={{ padding: "32px 36px", maxWidth: "800px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <h1 style={{ fontSize: "1.4rem", fontWeight: "600" }}>
+    <div style={{ padding: isMobile ? "16px" : "32px 36px", maxWidth: "800px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap", marginBottom: "24px" }}>
+        <h1 style={{ fontSize: isMobile ? "1.1rem" : "1.4rem", fontWeight: "600" }}>
           Auswertung – {ergebnis.pruefungName ?? "Prüfung"}
         </h1>
         <button
           onClick={onZurueck}
           style={{
-            border: "1px solid #d8d8d8",
-            background: "white",
-            padding: "8px 18px",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontSize: "0.875rem",
-            color: "#444",
+            border: "1px solid #d8d8d8", background: "white",
+            padding: "7px 14px", borderRadius: "8px",
+            cursor: "pointer", fontSize: "0.82rem", color: "#444",
           }}
         >
           ← Zurück

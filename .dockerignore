@@ -1,0 +1,10 @@
+# Was NICHT ins Scanner-Image gehört (kleineres Image, keine Secrets):
+node_modules
+Frontend
+backend
+.git
+.env
+.env.*
+*.traineddata
+ziffer_samples.db
+debug-overlay-*.png

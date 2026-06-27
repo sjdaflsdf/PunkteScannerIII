@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../api";
+import { useBreakpoint } from "../hooks/useBreakpoint";
 
 const DEFAULT_NOTENSCHLUESSEL_ANZEIGE = [
   { note: "1,0", schwelle: 95, color: "#4CAF50" },
@@ -32,6 +33,7 @@ function getStatusBadge(status) {
 }
 
 export default function PruefungDetail({ pruefung, onZurueck }) {
+  const { isMobile } = useBreakpoint();
   const [aufgaben, setAufgaben] = useState([]);
   const [ergebnisse, setErgebnisse] = useState([]);
   const [ladenAufgaben, setLadenAufgaben] = useState(true);
@@ -91,50 +93,35 @@ export default function PruefungDetail({ pruefung, onZurueck }) {
     : "Kein Datum";
 
   return (
-    <div style={{ padding: "32px 36px", maxWidth: "1000px" }}>
+    <div style={{ padding: isMobile ? "16px" : "32px 36px", maxWidth: "1000px" }}>
       {/* Header */}
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-start",
-        marginBottom: "24px",
-      }}>
-        <div>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: "600", marginBottom: "4px" }}>
-            {pruefung.name ?? "Prüfung"}
-          </h1>
-          <p style={{ color: "#999", fontSize: "0.85rem" }}>
-            {datum}
-            {pruefung.maxPunkte ? ` · ${pruefung.maxPunkte} Pkt. max` : ""}
-          </p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
-          <span style={{
-            backgroundColor: badge.bg,
-            color: badge.color,
-            padding: "4px 12px",
-            borderRadius: "20px",
-            fontSize: "0.78rem",
-            fontWeight: "500",
-            whiteSpace: "nowrap",
-          }}>
-            {badge.label}
-          </span>
-          <button
-            onClick={onZurueck}
-            style={{
-              border: "1px solid #d8d8d8",
-              background: "white",
-              padding: "8px 18px",
-              borderRadius: "8px",
-              cursor: "pointer",
-              fontSize: "0.875rem",
-              color: "#444",
-              whiteSpace: "nowrap",
-            }}
-          >
-            ← Zurück
-          </button>
+      <div style={{ marginBottom: "24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ fontSize: isMobile ? "1.1rem" : "1.4rem", fontWeight: "600", marginBottom: "4px" }}>
+              {pruefung.name ?? "Prüfung"}
+            </h1>
+            <p style={{ color: "#999", fontSize: "0.85rem" }}>
+              {datum}
+              {pruefung.maxPunkte ? ` · ${pruefung.maxPunkte} Pkt. max` : ""}
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+            <span style={{
+              backgroundColor: badge.bg, color: badge.color,
+              padding: "4px 10px", borderRadius: "20px",
+              fontSize: "0.75rem", fontWeight: "500", whiteSpace: "nowrap",
+            }}>
+              {badge.label}
+            </span>
+            <button onClick={onZurueck} style={{
+              border: "1px solid #d8d8d8", background: "white",
+              padding: "7px 14px", borderRadius: "8px",
+              cursor: "pointer", fontSize: "0.82rem", color: "#444", whiteSpace: "nowrap",
+            }}>
+              ← Zurück
+            </button>
+          </div>
         </div>
       </div>
 
@@ -148,26 +135,27 @@ export default function PruefungDetail({ pruefung, onZurueck }) {
         ) : aufgaben.length === 0 ? (
           <p style={hinweisStyle}>Keine Aufgaben für diese Prüfung angelegt.</p>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={TH}>Aufgabe</th>
-                <th style={TH}>Max. Punkte</th>
-              </tr>
-            </thead>
-            <tbody>
-              {aufgaben.map((a) => (
-                <tr
-                  key={a.id}
-                  onMouseEnter={(ev) => (ev.currentTarget.style.backgroundColor = "#fafafa")}
-                  onMouseLeave={(ev) => (ev.currentTarget.style.backgroundColor = "")}
-                >
-                  <td style={TD}>Aufgabe {a.aufgabeNr}</td>
-                  <td style={TD}>{a.maxPunkte}</td>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={TH}>Aufgabe</th>
+                  <th style={TH}>Max. Punkte</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {aufgaben.map((a) => (
+                  <tr key={a.id}
+                    onMouseEnter={(ev) => (ev.currentTarget.style.backgroundColor = "#fafafa")}
+                    onMouseLeave={(ev) => (ev.currentTarget.style.backgroundColor = "")}
+                  >
+                    <td style={TD}>Aufgabe {a.aufgabeNr}</td>
+                    <td style={TD}>{a.maxPunkte}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -232,41 +220,36 @@ export default function PruefungDetail({ pruefung, onZurueck }) {
             Noch keine Ergebnisse vorhanden. Führe zunächst eine Auswertung durch.
           </p>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={TH}>Matrikel-Nr.</th>
-                <th style={TH}>Gesamtpunkte</th>
-                <th style={TH}>Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ergebnisse.map((e) => {
-                const ns = noteStyle(e.note);
-                return (
-                  <tr
-                    key={e.id}
-                    onMouseEnter={(ev) => (ev.currentTarget.style.backgroundColor = "#fafafa")}
-                    onMouseLeave={(ev) => (ev.currentTarget.style.backgroundColor = "")}
-                  >
-                    <td style={{ ...TD, color: "#888" }}>{e.student?.matNr ?? "–"}</td>
-                    <td style={TD}>{e.gesamtPunkte ?? "–"}</td>
-                    <td style={TD}>
-                      <span style={{
-                        ...ns,
-                        padding: "3px 10px",
-                        borderRadius: "5px",
-                        fontWeight: "600",
-                        fontSize: "0.82rem",
-                      }}>
-                        {e.note ?? "–"}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={TH}>Matrikel-Nr.</th>
+                  <th style={TH}>Gesamtpunkte</th>
+                  <th style={TH}>Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ergebnisse.map((e) => {
+                  const ns = noteStyle(e.note);
+                  return (
+                    <tr key={e.id}
+                      onMouseEnter={(ev) => (ev.currentTarget.style.backgroundColor = "#fafafa")}
+                      onMouseLeave={(ev) => (ev.currentTarget.style.backgroundColor = "")}
+                    >
+                      <td style={{ ...TD, color: "#888" }}>{e.student?.matNr ?? "–"}</td>
+                      <td style={TD}>{e.gesamtPunkte ?? "–"}</td>
+                      <td style={TD}>
+                        <span style={{ ...ns, padding: "3px 10px", borderRadius: "5px", fontWeight: "600", fontSize: "0.82rem" }}>
+                          {e.note ?? "–"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

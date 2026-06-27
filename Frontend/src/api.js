@@ -1,4 +1,4 @@
-export const API = import.meta.env.VITE_API_URL || "https://punktescanner-iii.onrender.com";
+export const API = import.meta.env.VITE_API_URL || "https://punktescanneriii.onrender.com";
 const BASE_URL = API;
 
 async function request(path, options = {}) {
